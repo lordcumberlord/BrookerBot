@@ -12,19 +12,7 @@ import {
 } from "./pending";
 import { createTelegramBot } from "./telegram";
 
-// Prevent unhandled promise rejections from crashing the server
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("[server] Unhandled Rejection at:", promise, "reason:", reason);
-  // Don't exit - just log
-});
-
-process.on("uncaughtException", (error) => {
-  console.error("[server] Uncaught Exception:", error);
-  // Don't exit - just log (Railway will restart if needed)
-});
-
 const port = Number(process.env.PORT ?? 8787);
-console.log(`[server] Starting on port ${port} (from env: ${process.env.PORT || "default 8787"})`);
 const PUBLIC_KEY = process.env.DISCORD_PUBLIC_KEY;
 const DISCORD_API_DEFAULT_BASE = "https://discord.com/api/v10";
 
@@ -593,14 +581,7 @@ const server = Bun.serve({
 
       // Health checks
       if (url.pathname === "/" || url.pathname === "/health" || url.pathname === "/healthz") {
-        console.log(`[server] Health check: ${req.method} ${url.pathname}`);
-        return new Response("OK", { 
-          status: 200, 
-          headers: { 
-            "Content-Type": "text/plain",
-            "Cache-Control": "no-cache"
-          } 
-        });
+        return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain" } });
       }
 
     // Discord interactions endpoint
@@ -1663,8 +1644,6 @@ console.log(
 console.log(
   `📡 Discord interactions: http://${server.hostname}:${server.port}/interactions`
 );
-console.log(`✅ Server listening on ${server.hostname}:${server.port}`);
-console.log(`🌐 Health check: http://${server.hostname}:${server.port}/health`);
 
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
 const publicBaseUrl =
@@ -1679,8 +1658,7 @@ if (telegramToken) {
     );
   }
 
-  // Start Telegram bot in background - don't block server startup
-  Promise.resolve().then(async () => {
+  (async () => {
     try {
       const bot = createTelegramBot({
         token: telegramToken,
@@ -1712,10 +1690,7 @@ if (telegramToken) {
       console.error("[telegram] Failed to start bot:", err?.message || err);
       console.warn("[telegram] Continuing without Telegram bot - Discord bot should still work");
     }
-  }).catch((criticalError) => {
-    // Catch-all for any unexpected promise rejections
-    console.error("[telegram] Unhandled promise rejection (non-fatal):", criticalError);
-  });
+  })();
 } else {
   console.log("[telegram] TELEGRAM_BOT_TOKEN not set; Telegram bot disabled");
 }
