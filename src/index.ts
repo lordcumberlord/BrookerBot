@@ -1159,7 +1159,9 @@ const server = Bun.serve({
       const origin = url.origin;
       const ogImageUrl = `${origin}/assets/x402-card.svg`;
       const discordAppId = process.env.DISCORD_APPLICATION_ID || "YOUR_APP_ID";
-      const discordInviteUrl = `https://discord.com/oauth2/authorize?client_id=${discordAppId}&scope=bot&permissions=68608`;
+      // Enhanced permissions: View Channels + Send Messages + Read Message History + Use External Emojis + Send Messages in Threads + Add Reactions
+      // 1024 | 2048 | 65536 | 262144 | 17179869184 | 64 = 17180200000
+      const discordInviteUrl = `https://discord.com/oauth2/authorize?client_id=${discordAppId}&scope=bot&permissions=17180200000`;
       return new Response(`<!DOCTYPE html>
 <html lang="en">
 <head>
