@@ -13,6 +13,7 @@ import {
 import { createTelegramBot } from "./telegram";
 
 const port = Number(process.env.PORT ?? 8787);
+console.log(`[server] Starting on port ${port} (from env: ${process.env.PORT || "default 8787"})`);
 const PUBLIC_KEY = process.env.DISCORD_PUBLIC_KEY;
 const DISCORD_API_DEFAULT_BASE = "https://discord.com/api/v10";
 
@@ -1644,6 +1645,8 @@ console.log(
 console.log(
   `📡 Discord interactions: http://${server.hostname}:${server.port}/interactions`
 );
+console.log(`✅ Server listening on ${server.hostname}:${server.port}`);
+console.log(`🌐 Health check: http://${server.hostname}:${server.port}/health`);
 
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
 const publicBaseUrl =
