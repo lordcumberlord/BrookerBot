@@ -898,7 +898,7 @@ addEntrypoint({
 });
 
 // CumBot flow
-const cumBotFlowSignature = "query:string, queryType:string, platform:string, chatContext:string, maxChars:number -> response:string";
+const cumBotFlowSignature = "query:string, queryType:string, platform:string, chatContext:string, maxChars:number -> responseText:string";
 const cumBotFlowNodeSpec = `${cumBotFlowSignature} ${JSON.stringify(cumBotPrompt)}`;
 
 const cumBotFlow = flow<{
@@ -917,7 +917,7 @@ const cumBotFlow = flow<{
     maxChars: state.maxChars,
   }))
   .returns((state) => ({
-    response: state.cumResult.response as string,
+    responseText: state.cumResult.responseText as string,
   }));
 
 addEntrypoint({
@@ -1082,7 +1082,7 @@ addEntrypoint({
       
       return {
         output: {
-          response: (result.response || "").trim() || "something broke in my head",
+          response: (result.responseText || "").trim() || "something broke in my head",
         },
         model: "cum-bot",
       };
