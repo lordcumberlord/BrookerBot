@@ -1544,14 +1544,43 @@ const server = Bun.serve({
         const facilitatorClient = useFacilitator({
           url: facilitatorUrl as `${string}://${string}`,
         });
+        console.log("[payment] 📋 Payment verification inputs:", {
+          facilitatorUrl,
+          decodedPaymentKeys: Object.keys(decodedPayment),
+          paymentAmount: decodedPayment.amount,
+          paymentResource: decodedPayment.resource,
+          selectedRequirements: {
+            resource: selectedPaymentRequirements.resource,
+            maxAmountRequired: selectedPaymentRequirements.maxAmountRequired,
+            payTo: selectedPaymentRequirements.payTo,
+          },
+        });
+        
         let verification;
         try {
           verification = await facilitatorClient.verify(
             decodedPayment,
             selectedPaymentRequirements
           );
-        } catch (error) {
-          console.error("[payment] Facilitator verification error", error);
+          console.log("[payment] ✅ Verification result:", {
+            isValid: verification.isValid,
+            invalidReason: verification.invalidReason,
+            payer: verification.payer,
+            keys: Object.keys(verification),
+          });
+        } catch (error: any) {
+          console.error("[payment] ❌ Facilitator verification error", error);
+          console.error("[payment] Verification error details:", {
+            message: error?.message,
+            name: error?.name,
+            response: error?.response ? {
+              status: error.response.status,
+              statusText: error.response.statusText,
+              data: typeof error.response.data === 'string' 
+                ? error.response.data.substring(0, 500)
+                : JSON.stringify(error.response.data).substring(0, 500),
+            } : undefined,
+          });
           return Response.json(
             {
               error: "Failed to verify payment",
@@ -1563,7 +1592,7 @@ const server = Bun.serve({
         }
 
         if (!verification.isValid) {
-          console.error("[payment] Payment verification failed", verification);
+          console.error("[payment] ❌ Payment verification failed", verification);
           return Response.json(
             {
               error: verification.invalidReason || "Payment verification failed",
@@ -1574,6 +1603,8 @@ const server = Bun.serve({
             { status: 402 }
           );
         }
+        
+        console.log("[payment] ✅ Payment verified successfully, proceeding to handler...");
 
         const appResponse = await app.fetch(req);
 
@@ -1584,12 +1615,44 @@ const server = Bun.serve({
         const appResponseClone = appResponse.clone();
         let settlement;
         try {
+          console.log("[payment] 🔄 Attempting settlement...");
+          console.log("[payment] Settlement inputs:", {
+            decodedPaymentKeys: Object.keys(decodedPayment),
+            paymentAmount: decodedPayment.amount,
+            paymentResource: decodedPayment.resource,
+            selectedRequirements: {
+              resource: selectedPaymentRequirements.resource,
+              maxAmountRequired: selectedPaymentRequirements.maxAmountRequired,
+              payTo: selectedPaymentRequirements.payTo,
+            },
+          });
+          
           settlement = await facilitatorClient.settle(
             decodedPayment,
             selectedPaymentRequirements
           );
-        } catch (error) {
-          console.error("[payment] Facilitator settlement error", error);
+          
+          console.log("[payment] Settlement response:", {
+            success: settlement.success,
+            hasError: !!settlement.errorReason,
+            errorReason: settlement.errorReason,
+            payer: settlement.payer,
+            keys: Object.keys(settlement),
+          });
+        } catch (error: any) {
+          console.error("[payment] ❌ Facilitator settlement error", error);
+          console.error("[payment] Error details:", {
+            message: error?.message,
+            name: error?.name,
+            stack: error?.stack?.substring(0, 500),
+            response: error?.response ? {
+              status: error.response.status,
+              statusText: error.response.statusText,
+              data: typeof error.response.data === 'string' 
+                ? error.response.data.substring(0, 500)
+                : JSON.stringify(error.response.data).substring(0, 500),
+            } : undefined,
+          });
           return Response.json(
             {
               error: "Failed to settle payment",
