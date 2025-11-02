@@ -575,12 +575,13 @@ async function handleTelegramCallback(req: Request): Promise<Response> {
 const server = Bun.serve({
   port,
   async fetch(req) {
-    const url = new URL(req.url);
+    try {
+      const url = new URL(req.url);
 
-    // Health checks
-    if (url.pathname === "/" || url.pathname === "/health" || url.pathname === "/healthz") {
-      return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain" } });
-    }
+      // Health checks
+      if (url.pathname === "/" || url.pathname === "/health" || url.pathname === "/healthz") {
+        return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain" } });
+      }
 
     // Discord interactions endpoint
     if (url.pathname === "/interactions") {
@@ -1620,8 +1621,19 @@ const server = Bun.serve({
       }
     }
     
-    // Agent app routes
-    return app.fetch(req);
+      // Agent app routes
+      return app.fetch(req);
+    } catch (error: any) {
+      console.error("[server] Unhandled error in fetch:", error);
+      return new Response(
+        JSON.stringify({ error: "Internal server error", message: error?.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  },
+  error(error) {
+    console.error("[server] Server error:", error);
+    return new Response("Internal Server Error", { status: 500 });
   },
 });
 
