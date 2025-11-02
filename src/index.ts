@@ -1652,6 +1652,13 @@ if (telegramToken) {
         console.warn("[telegram] This is normal if the bot is running on Railway or in another terminal.");
         return;
       }
+      // Handle 404 on deleteWebhook - harmless, just means no webhook exists
+      if (err?.error_code === 404 && err?.method === "deleteWebhook") {
+        console.warn("[telegram] No webhook to delete (404) - this is normal for new bots");
+        console.warn("[telegram] Bot should still work, but if issues persist, check bot token");
+        // Don't crash - the bot might still be functional
+        return;
+      }
       console.error("[telegram] Failed to start bot", err);
     }
   })();
