@@ -112,7 +112,10 @@ const configOverrides: AgentKitConfig = {
   },
 };
 
-const axClient = createAxLLMClient({
+// Only include x402 config if we have a private key (required for x402)
+// Without x402 config, createAxLLMClient should work with OpenAI directly
+const hasX402PrivateKey = !!(process.env.AX_PRIVATE_KEY ?? process.env.AXLLM_PRIVATE_KEY ?? process.env.X402_PRIVATE_KEY);
+const baseClientConfig = {
   logger: {
     warn(message, error) {
       if (error) {
@@ -128,16 +131,25 @@ const axClient = createAxLLMClient({
     process.env.AX_MODEL ?? process.env.AXLLM_MODEL ?? process.env.OPENAI_MODEL ?? undefined,
   apiKey:
     process.env.AX_API_KEY ?? process.env.AXLLM_API_KEY ?? process.env.OPENAI_API_KEY ?? undefined,
-  x402: {
-    ai: {
-      apiURL:
-        process.env.AX_API_URL ??
-        process.env.AXLLM_API_URL ??
-        process.env.OPENAI_API_URL ??
-        undefined,
-    },
-  },
-});
+};
+
+// Only add x402 config if we have a private key
+const axClient = createAxLLMClient(
+  hasX402PrivateKey
+    ? {
+        ...baseClientConfig,
+        x402: {
+          ai: {
+            apiURL:
+              process.env.AX_API_URL ??
+              process.env.AXLLM_API_URL ??
+              process.env.OPENAI_API_URL ??
+              undefined,
+          },
+        },
+      }
+    : baseClientConfig
+);
 
 if (!axClient.isConfigured()) {
   console.warn(
