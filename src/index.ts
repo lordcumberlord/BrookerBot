@@ -1614,6 +1614,7 @@ const server = Bun.serve({
 
         const appResponseClone = appResponse.clone();
         let settlement;
+        let settlementTimedOut = false;
         try {
           console.log("[payment] 🔄 Attempting settlement...");
           console.log("[payment] Settlement inputs:", {
@@ -1627,10 +1628,16 @@ const server = Bun.serve({
             },
           });
           
-          settlement = await facilitatorClient.settle(
-            decodedPayment,
-            selectedPaymentRequirements
-          );
+          // Add timeout wrapper for settlement (30 seconds)
+          settlement = await Promise.race([
+            facilitatorClient.settle(
+              decodedPayment,
+              selectedPaymentRequirements
+            ),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("Settlement timeout after 30 seconds")), 30000)
+            )
+          ]) as any;
           
           console.log("[payment] Settlement response:", {
             success: settlement.success,
@@ -1640,30 +1647,48 @@ const server = Bun.serve({
             keys: Object.keys(settlement),
           });
         } catch (error: any) {
-          console.error("[payment] ❌ Facilitator settlement error", error);
-          console.error("[payment] Error details:", {
-            message: error?.message,
-            name: error?.name,
-            stack: error?.stack?.substring(0, 500),
-            response: error?.response ? {
-              status: error.response.status,
-              statusText: error.response.statusText,
-              data: typeof error.response.data === 'string' 
-                ? error.response.data.substring(0, 500)
-                : JSON.stringify(error.response.data).substring(0, 500),
-            } : undefined,
-          });
-          return Response.json(
-            {
-              error: "Failed to settle payment",
-              accepts: paymentRequirements,
-              x402Version,
-            },
-            { status: 402 }
-          );
+          // Check if it's a timeout error
+          const isTimeout = error?.name === "TimeoutError" || 
+                           error?.message?.includes("timeout") || 
+                           error?.message?.includes("Timeout");
+          
+          if (isTimeout) {
+            console.warn("[payment] ⚠️ Settlement timed out, but payment was verified - proceeding with response");
+            console.warn("[payment] Settlement timeout details:", {
+              message: error?.message,
+              name: error?.name,
+            });
+            settlementTimedOut = true;
+            // Continue execution - payment was already verified, handler already ran
+            // Settlement can be retried later or handled separately
+          } else {
+            console.error("[payment] ❌ Facilitator settlement error", error);
+            console.error("[payment] Error details:", {
+              message: error?.message,
+              name: error?.name,
+              stack: error?.stack?.substring(0, 500),
+              response: error?.response ? {
+                status: error.response.status,
+                statusText: error.response.statusText,
+                data: typeof error.response.data === 'string' 
+                  ? error.response.data.substring(0, 500)
+                  : JSON.stringify(error.response.data).substring(0, 500),
+              } : undefined,
+            });
+            // For non-timeout errors, still return error (could be invalid payment)
+            return Response.json(
+              {
+                error: "Failed to settle payment",
+                accepts: paymentRequirements,
+                x402Version,
+              },
+              { status: 402 }
+            );
+          }
         }
 
-        if (!settlement.success) {
+        // Only check settlement.success if we actually got a settlement response
+        if (!settlementTimedOut && settlement && !settlement.success) {
           console.error("[payment] Settlement failed", settlement);
           return Response.json(
             {
@@ -1676,11 +1701,16 @@ const server = Bun.serve({
           );
         }
 
-        const settlementHeader = settleResponseHeader(settlement);
-        console.log(`[payment] Settlement succeeded:`, settlement);
-
         const headers = new Headers(appResponse.headers);
-        headers.set("X-PAYMENT-RESPONSE", settlementHeader);
+        
+        // Only set settlement header if we successfully settled
+        if (!settlementTimedOut && settlement) {
+          const settlementHeader = settleResponseHeader(settlement);
+          console.log(`[payment] Settlement succeeded:`, settlement);
+          headers.set("X-PAYMENT-RESPONSE", settlementHeader);
+        } else {
+          console.warn("[payment] ⚠️ Proceeding without settlement header due to timeout");
+        }
         const responseWithHeader = new Response(appResponse.body, {
           status: appResponse.status,
           statusText: appResponse.statusText,
