@@ -574,6 +574,7 @@ async function handleTelegramCallback(req: Request): Promise<Response> {
 
 const server = Bun.serve({
   port,
+  hostname: "0.0.0.0", // Bind to all interfaces (required for Railway)
   async fetch(req) {
     try {
       const url = new URL(req.url);
