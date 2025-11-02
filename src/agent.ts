@@ -1086,11 +1086,15 @@ addEntrypoint({
         console.log(`[cumbot] Chat context preview: ${chatContext.substring(0, 200)}...`);
       }
       
+      // Add a small random variation to encourage uniqueness
+      // Include current timestamp as context to make each call unique
+      const timestampVariation = `[context: ${new Date().toISOString()}] `;
+      
       const result = await cumBotFlow.forward(llm, {
         query,
         queryType,
         platform,
-        chatContext: chatContext || "",
+        chatContext: (chatContext || "") + timestampVariation,
         maxChars: 280,
       });
       
