@@ -233,6 +233,22 @@ async function handleDiscordInteraction(req: Request): Promise<Response> {
             return;
           }
 
+          // Check for permission errors (403) - provide helpful guidance
+          if (entrypointResponse.status === 500) {
+            const errorMessage = responseData.error?.message || "";
+            if (errorMessage.includes("Missing Access") || errorMessage.includes("50001")) {
+              console.error(`[discord] Permission error:`, responseData);
+              await fetch(followupUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  content: `❌ **Permission Error**\n\nThe bot needs permission to read messages in this channel.\n\n**Fix:**\n1. Go to **Server Settings** → **Roles** → Select **CumBot**\n2. Enable: **View Channels**, **Read Message History**\n3. Go to **Channel Settings** → **Permissions** → **CumBot**\n4. Enable: **View Channel**, **Read Message History**\n\nIf the bot role is lower than other roles, move it higher in the role list.`,
+                }),
+              });
+              return;
+            }
+          }
+
           // Log the response status for debugging
           console.log(`[discord] Entrypoint response status: ${entrypointResponse.status}`);
 
