@@ -1250,9 +1250,9 @@ const server = Bun.serve({
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CumBot</title>
+  <title>CumBot - gib $1 via x402 and see what shit I come up with</title>
   <meta name="description" content="gib $1 via x402 and see what shit I come up with">
-  <meta property="og:title" content="CumBot">
+  <meta property="og:title" content="CumBot - gib $1 via x402 and see what shit I come up with">
   <meta property="og:description" content="gib $1 via x402 and see what shit I come up with">
   <meta property="og:type" content="website">
   <meta property="og:url" content="${origin}/download">
@@ -1261,7 +1261,7 @@ const server = Bun.serve({
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="CumBot">
+  <meta name="twitter:title" content="CumBot - gib $1 via x402 and see what shit I come up with">
   <meta name="twitter:description" content="gib $1 via x402 and see what shit I come up with">
   <meta name="twitter:image" content="${ogImageUrl}">
   <style>
