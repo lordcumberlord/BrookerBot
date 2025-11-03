@@ -1511,7 +1511,7 @@ const server = Bun.serve({
         }
 
         const payToAddress =
-          process.env.PAY_TO || "0x1b0006DbFbF4d8Ec99cd7C40C43566EaA7D95feD";
+          process.env.PAY_TO || "0x68b08c4e17788af6c9d98a2cfde084ed9d6b53cd";
         const facilitatorUrl =
           process.env.FACILITATOR_URL || "https://facilitator.x402.rs";
         const agentBaseUrl =
