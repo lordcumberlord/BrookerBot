@@ -751,11 +751,14 @@ const server = Bun.serve({
       const price = process.env.ENTRYPOINT_PRICE || "1.00";
       const currency = process.env.PAYMENT_CURRENCY || "USDC";
 
-      const heading = `💳 /Cum for "${query}"`;
+      const heading = `🪙 Cum for '${query}'`;
       const entityLabel = usingTelegram ? "Chat ID" : "Channel ID";
       const postPaymentPrompt = usingTelegram
-        ? "After payment, /Cum's response will automatically appear in Telegram."
-        : "After payment, /Cum's response will automatically appear in Discord.";
+        ? "After payment, CumBot's response will automatically appear in Telegram."
+        : "After payment, CumBot's response will automatically appear in Discord.";
+
+      const origin = url.origin;
+      const logoUrl = `${origin}/assets/cumbot-og.png`;
 
       const pageConfig = {
         source,
@@ -776,23 +779,75 @@ const server = Bun.serve({
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body { font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-    .container { background: #f5f5f5; padding: 30px; border-radius: 12px; }
-    h1 { color: #333; margin-top: 0; }
-    .info { background: white; padding: 15px; border-radius: 8px; margin: 20px 0; }
-    .button { background: #5865F2; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; margin-top: 20px; }
-    .button:hover { background: #4752C4; }
+    body { 
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; 
+      max-width: 600px; 
+      margin: 50px auto; 
+      padding: 20px;
+      background: #000000;
+      color: #e2e8f0;
+    }
+    .container { 
+      background: linear-gradient(145deg, rgba(0, 0, 0, 0.85), rgba(20, 20, 20, 0.95));
+      border: 1px solid rgba(148, 163, 184, 0.1);
+      padding: 30px; 
+      border-radius: 16px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.8);
+    }
+    .logo {
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 20px;
+      background-image: url("${logoUrl}");
+      background-size: contain;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+    h1 { 
+      color: #e2e8f0; 
+      margin-top: 0;
+      text-align: center;
+      font-size: 1.75rem;
+    }
+    .info { 
+      background: linear-gradient(160deg, rgba(20, 20, 20, 0.9), rgba(0, 0, 0, 0.95));
+      border: 1px solid rgba(148, 163, 184, 0.1);
+      padding: 15px; 
+      border-radius: 8px; 
+      margin: 20px 0;
+      color: #cbd5f5;
+    }
+    .button { 
+      background: linear-gradient(120deg, #ffffff, #e0e0e0);
+      color: #000000;
+      padding: 12px 24px; 
+      border: none; 
+      border-radius: 6px; 
+      cursor: pointer; 
+      font-size: 16px; 
+      margin-top: 20px;
+      width: 100%;
+      font-weight: 600;
+      box-shadow: 0 12px 32px rgba(255, 255, 255, 0.2);
+    }
+    .button:hover { 
+      background: linear-gradient(120deg, #ffffff, #f5f5f5);
+      box-shadow: 0 18px 28px rgba(255, 255, 255, 0.3);
+    }
+    #status {
+      color: #cbd5f5;
+    }
   </style>
 </head>
 <body>
   <div class="container">
+    <div class="logo"></div>
     <h1>${heading}</h1>
     <div class="info">
       <p><strong>Price:</strong> $${price} ${currency}</p>
       <p><strong>${entityLabel}:</strong> ${primaryId}</p>
-      <p><strong>Lookback:</strong> ${lookbackMinutes} minutes</p>
     </div>
-    <p>Click below to pay via x402. ${postPaymentPrompt}</p>
+    <p style="text-align: center; color: #cbd5f5;">Click below to pay via x402. ${postPaymentPrompt}</p>
     <button class="button" onclick="pay()">Pay $${price} ${currency}</button>
     <div id="status" style="margin-top: 20px;"></div>
   </div>
@@ -959,7 +1014,7 @@ const server = Bun.serve({
         
         const entrypointUrl = cfg.entrypointUrl;
         
-        status.innerHTML = '<p>💳 Processing payment (gasless via facilitator)...</p>';
+        status.innerHTML = '<p>🪙 Processing payment (gasless via facilitator)...</p>';
         
         const requestInput = cfg.source === 'telegram'
           ? {
