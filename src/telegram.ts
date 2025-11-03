@@ -110,7 +110,7 @@ export function createTelegramBot(options: {
 
   bot.command("start", async (ctx) => {
     await ctx.reply(
-      "hey. i'm /Cum. use /Cum for <topic> or /Cum for @username to summon me."
+      "hey. i'm CumBot. use /Cum for <topic> or /Cum for @username to summon me."
     );
   });
 
