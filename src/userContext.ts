@@ -217,6 +217,79 @@ export function updateUserContext(
   }
 }
 
+// Get user context by username (for when we don't have userId yet)
+export function getUserContextByUsername(
+  platform: "discord" | "telegram",
+  username: string
+): UserContext | null {
+  try {
+    const usernameLower = username.toLowerCase();
+    const row = db
+      .query<{
+        user_key: string;
+        platform: string;
+        username: string | null;
+        display_name: string | null;
+        message_count: number;
+        notable_messages: string | null;
+        last_seen_ms: number;
+        avg_message_length: number;
+        max_message_length: number;
+        min_message_length: number;
+        total_length: number;
+        keywords: string | null;
+        updated_at: number;
+      }>(
+        "SELECT * FROM user_context WHERE platform = ? AND LOWER(username) = ? LIMIT 1"
+      )
+      .get(platform, usernameLower);
+
+    if (!row) {
+      return null;
+    }
+
+    // Extract userId from user_key (format: "platform:userId")
+    const userId = row.user_key.split(":")[1];
+
+    let notableMessages: string[] = [];
+    if (row.notable_messages) {
+      try {
+        notableMessages = JSON.parse(row.notable_messages);
+      } catch {
+        notableMessages = [];
+      }
+    }
+
+    let keywords: Record<string, number> = {};
+    if (row.keywords) {
+      try {
+        keywords = JSON.parse(row.keywords);
+      } catch {
+        keywords = {};
+      }
+    }
+
+    return {
+      userId,
+      platform: row.platform as "discord" | "telegram",
+      username: row.username,
+      displayName: row.display_name,
+      messageCount: row.message_count,
+      notableMessages,
+      lastSeenMs: row.last_seen_ms,
+      avgMessageLength: row.avg_message_length,
+      maxMessageLength: row.max_message_length,
+      minMessageLength: row.min_message_length,
+      totalLength: row.total_length,
+      keywords: JSON.stringify(keywords),
+      updatedAt: row.updated_at,
+    };
+  } catch (error) {
+    console.warn(`[userContext] Failed to get context by username for ${platform}:${username}:`, error);
+    return null;
+  }
+}
+
 // Get user context for enriching chat context
 export function getUserContext(
   platform: "discord" | "telegram",

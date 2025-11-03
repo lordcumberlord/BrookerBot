@@ -7,7 +7,7 @@ import {
 import { flow } from "@ax-llm/ax";
 import { getTelegramMessagesWithin } from "./telegramStore";
 import { cumBotPrompt } from "./cumPrompt";
-import { getUserContext, formatUserContextForLLM, updateUserContext } from "./userContext";
+import { getUserContext, getUserContextByUsername, formatUserContextForLLM, updateUserContext } from "./userContext";
 
 type DiscordAuthor = {
   id: string;
@@ -1052,13 +1052,22 @@ addEntrypoint({
         
         messages = buildDiscordSummarizerMessages(filteredDiscordMessages, null);
         
-        // Get historical context for person queries
+        // Get historical context for person queries (even if no recent messages found)
+        let historicalContext = null;
         if (targetUserId) {
-          const historicalContext = getUserContext("discord", targetUserId);
-          if (historicalContext) {
-            const formattedContext = formatUserContextForLLM(historicalContext);
-            chatContext = `${formattedContext}\n\n`;
-          }
+          // Try by user ID first (most reliable)
+          historicalContext = getUserContext("discord", targetUserId);
+        }
+        
+        // If no context found and we have a username, try looking up by username
+        if (!historicalContext && targetUsername) {
+          const cleanUsername = targetUsername.replace(/^@/, "");
+          historicalContext = getUserContextByUsername("discord", cleanUsername);
+        }
+        
+        if (historicalContext) {
+          const formattedContext = formatUserContextForLLM(historicalContext);
+          chatContext = `${formattedContext}\n\n`;
         }
       } else {
         // Topic: filter messages that mention the topic
@@ -1119,14 +1128,24 @@ addEntrypoint({
         // Now convert to SummarizerMessage format
         messages = buildTelegramSummarizerMessages(filteredMessages);
         
-        // Get historical context for person queries
+        // Get historical context for person queries (even if no recent messages found)
+        let historicalContext = null;
         const firstMessage = filteredMessages[0];
         if (firstMessage?.authorId) {
-          const historicalContext = getUserContext("telegram", String(firstMessage.authorId));
-          if (historicalContext) {
-            const formattedContext = formatUserContextForLLM(historicalContext);
-            chatContext = `${formattedContext}\n\n`;
-          }
+          // Try by user ID first (most reliable)
+          historicalContext = getUserContext("telegram", String(firstMessage.authorId));
+        }
+        
+        // If no context found and we have a username, try looking up by username
+        if (!historicalContext && targetUsername) {
+          // Remove @ if present
+          const cleanUsername = targetUsername.replace(/^@/, "");
+          historicalContext = getUserContextByUsername("telegram", cleanUsername);
+        }
+        
+        if (historicalContext) {
+          const formattedContext = formatUserContextForLLM(historicalContext);
+          chatContext = `${formattedContext}\n\n`;
         }
       } else {
         // Topic: filter messages that mention the topic
