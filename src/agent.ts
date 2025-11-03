@@ -808,10 +808,13 @@ addEntrypoint({
       throw new Error("Invalid Telegram chat ID provided.");
     }
 
+    // Determine query type to set appropriate default
+    const queryType = ctx.input.query.startsWith("@") || ctx.input.query.match(/^<@\d+>/) ? "person" : "topic";
+    
     const lookbackMinutes =
       typeof ctx.input.lookbackMinutes === "number"
         ? ctx.input.lookbackMinutes
-        : 60;
+        : queryType === "person" ? 240 : 60; // 4 hours for person, 1 hour for topic
 
     const messages = getTelegramMessagesWithin(chatNumeric, lookbackMinutes);
     const meaningfulMessages = messages.filter((msg) => {

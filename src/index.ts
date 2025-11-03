@@ -169,7 +169,13 @@ async function handleDiscordInteraction(req: Request): Promise<Response> {
           }
         }
         
-        const lookbackValidation = validateLookback(minutesOption?.value ?? 60);
+        // Determine if this is a person query (starts with @ or <@)
+        const isPersonQuery = query.startsWith("@") || query.match(/^<@\d+>/);
+        
+        // Use 4 hours (240 minutes) default for person queries, 60 minutes for topics
+        const defaultLookback = isPersonQuery ? 240 : 60;
+        
+        const lookbackValidation = validateLookback(minutesOption?.value ?? defaultLookback);
         if ("error" in lookbackValidation) {
           return makeEphemeralResponse(`❌ ${lookbackValidation.error}`);
         }

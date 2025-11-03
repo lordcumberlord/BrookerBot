@@ -4,7 +4,8 @@ import { PAYMENT_CALLBACK_EXPIRY_MS } from "./constants";
 import { pendingTelegramCallbacks } from "./pending";
 import { addTelegramMessage, updateTelegramMessageReactions } from "./telegramStore";
 
-const DEFAULT_LOOKBACK_MINUTES = 60;
+const DEFAULT_LOOKBACK_MINUTES_TOPIC = 60; // 1 hour for topics
+const DEFAULT_LOOKBACK_MINUTES_PERSON = 240; // 4 hours for people
 
 function parseCumCommand(text: string | undefined): { query: string; lookbackMinutes: number } | { error: string } {
   if (!text) {
@@ -33,9 +34,11 @@ function parseCumCommand(text: string | undefined): { query: string; lookbackMin
     lookbackMinutes = lookbackResult.minutes;
     query = rest.substring(0, rest.lastIndexOf(lastWord!)).trim();
   } else {
-    // No lookback specified, use default
-    lookbackMinutes = DEFAULT_LOOKBACK_MINUTES;
+    // No lookback specified - determine if it's a person query and use appropriate default
     query = rest.trim();
+    // Check if query is a person (starts with @) or is "me"
+    const isPersonQuery = query.toLowerCase() === "me" || query.startsWith("@");
+    lookbackMinutes = isPersonQuery ? DEFAULT_LOOKBACK_MINUTES_PERSON : DEFAULT_LOOKBACK_MINUTES_TOPIC;
   }
   
   if (!query) {
@@ -115,7 +118,17 @@ export function createTelegramBot(options: {
   });
 
   bot.command("cum", async (ctx) => {
-    const parseResult = parseCumCommand(ctx.message?.text);
+    // Convert "me" to username before parsing (if present in the command)
+    let commandText = ctx.message?.text;
+    if (commandText && /\bme\b/i.test(commandText)) {
+      const userId = ctx.from?.id;
+      if (userId) {
+        const username = ctx.from.username || String(userId);
+        commandText = commandText.replace(/\bme\b/i, `@${username}`);
+      }
+    }
+    
+    const parseResult = parseCumCommand(commandText);
 
     if ("error" in parseResult) {
       await ctx.reply(parseResult.error);
