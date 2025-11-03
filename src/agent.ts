@@ -7,6 +7,7 @@ import {
 import { flow } from "@ax-llm/ax";
 import { getTelegramMessagesWithin } from "./telegramStore";
 import { cumBotPrompt } from "./cumPrompt";
+import { getUserContext, formatUserContextForLLM, updateUserContext } from "./userContext";
 
 type DiscordAuthor = {
   id: string;
@@ -999,18 +1000,66 @@ addEntrypoint({
       });
       
       // Filter messages based on query type
+      let targetUserId: string | null = null;
       if (queryType === "person") {
         // Extract username from query (@username or <@123456>)
-        const usernameMatch = query.match(/@(\w+)/) || query.match(/<@(\d+)>/);
-        const targetUsername = usernameMatch ? usernameMatch[1] : query.replace("@", "");
+        const userIdMatch = query.match(/<@(\d+)>/);
+        const usernameMatch = query.match(/@(\w+)/);
         
-        // Filter messages from this person
-        messages = buildDiscordSummarizerMessages(fetchedMessages, null)
-          .filter(msg => {
-            const authorLower = msg.author.toLowerCase();
-            return authorLower.includes(targetUsername.toLowerCase()) ||
-                   authorLower.includes(query.toLowerCase().replace("@", ""));
-          });
+        if (userIdMatch) {
+          targetUserId = userIdMatch[1]; // Discord user ID
+        }
+        
+        const targetUsername = userIdMatch ? userIdMatch[1] : (usernameMatch ? usernameMatch[1] : query.replace("@", ""));
+        
+        // Filter messages from this person - need to match against raw Discord messages to get user IDs
+        const filteredDiscordMessages = fetchedMessages.filter((msg: any) => {
+          const msgAuthorId = msg?.author?.id;
+          const msgAuthorName = (msg?.author?.global_name || msg?.author?.display_name || msg?.author?.username || "").toLowerCase();
+          const queryLower = query.toLowerCase();
+          
+          // Match by user ID if available
+          if (targetUserId && msgAuthorId === targetUserId) {
+            return true;
+          }
+          
+          // Match by username
+          return msgAuthorName.includes(targetUsername.toLowerCase()) ||
+                 msgAuthorName.includes(queryLower.replace("@", ""));
+        });
+        
+        // Update user context for each message we see
+        for (const msg of filteredDiscordMessages) {
+          if (msg?.author?.id) {
+            const userId = msg.author.id;
+            const username = msg.author.username || null;
+            const displayName = msg.author.global_name || msg.author.display_name || username;
+            const text = msg.content || "";
+            const reactions = Array.isArray(msg.reactions) 
+              ? msg.reactions.reduce((sum: number, r: any) => sum + (r.count || 0), 0)
+              : 0;
+            const timestampMs = msg.timestamp ? new Date(msg.timestamp).getTime() : Date.now();
+            
+            updateUserContext("discord", userId, {
+              text,
+              username,
+              displayName,
+              reactionCount: reactions,
+              timestampMs,
+            });
+          }
+        }
+        
+        messages = buildDiscordSummarizerMessages(filteredDiscordMessages, null);
+        
+        // Get historical context for person queries
+        if (targetUserId) {
+          const historicalContext = getUserContext("discord", targetUserId);
+          if (historicalContext) {
+            const formattedContext = formatUserContextForLLM(historicalContext);
+            chatContext = `${formattedContext}\n\n`;
+          }
+        }
       } else {
         // Topic: filter messages that mention the topic
         const queryLower = query.toLowerCase();
@@ -1019,10 +1068,12 @@ addEntrypoint({
       }
       
       // Build chat context string
-      chatContext = messages
+      const recentContext = messages
         .slice(0, 20) // Limit to recent 20 messages
         .map(msg => `${msg.author}: ${msg.text}`)
         .join("\n");
+      
+      chatContext = chatContext ? `${chatContext}${recentContext}` : recentContext;
         
     } else if (platform === "telegram" && chatId) {
       // Fetch Telegram messages
@@ -1067,6 +1118,16 @@ addEntrypoint({
         
         // Now convert to SummarizerMessage format
         messages = buildTelegramSummarizerMessages(filteredMessages);
+        
+        // Get historical context for person queries
+        const firstMessage = filteredMessages[0];
+        if (firstMessage?.authorId) {
+          const historicalContext = getUserContext("telegram", String(firstMessage.authorId));
+          if (historicalContext) {
+            const formattedContext = formatUserContextForLLM(historicalContext);
+            chatContext = `${formattedContext}\n\n`;
+          }
+        }
       } else {
         // Topic: filter messages that mention the topic
         const queryLower = query.toLowerCase();
@@ -1077,10 +1138,12 @@ addEntrypoint({
       }
       
       // Build chat context string
-      chatContext = messages
+      const recentContext = messages
         .slice(0, 20)
         .map(msg => `${msg.author}: ${msg.text}`)
         .join("\n");
+      
+      chatContext = chatContext ? `${chatContext}${recentContext}` : recentContext;
     }
     
     // If no context found, use empty string (LLM can still respond)

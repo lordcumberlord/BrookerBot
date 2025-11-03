@@ -1,3 +1,5 @@
+import { updateUserContext } from "./userContext";
+
 export type TelegramStoredMessage = {
   messageId: number;
   text: string;
@@ -48,6 +50,18 @@ export function updateTelegramMessageReactions(
   
   const message = messages.find((msg) => msg.messageId === messageId);
   if (message) {
+    const oldReactionCount = message.reactionCount || 0;
     message.reactionCount = reactionCount;
+    
+    // Update user context with new reaction count if message becomes notable
+    if (message.authorId && reactionCount >= 3 && oldReactionCount < 3) {
+      updateUserContext("telegram", String(message.authorId), {
+        text: message.text,
+        username: message.authorUsername || null,
+        displayName: message.authorDisplay || null,
+        reactionCount: reactionCount,
+        timestampMs: message.timestampMs,
+      });
+    }
   }
 }

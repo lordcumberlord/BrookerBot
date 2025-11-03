@@ -3,6 +3,7 @@ import { validateLookback } from "./lookback";
 import { PAYMENT_CALLBACK_EXPIRY_MS } from "./constants";
 import { pendingTelegramCallbacks } from "./pending";
 import { addTelegramMessage, updateTelegramMessageReactions } from "./telegramStore";
+import { updateUserContext } from "./userContext";
 
 const DEFAULT_LOOKBACK_MINUTES_TOPIC = 60; // 1 hour for topics
 const DEFAULT_LOOKBACK_MINUTES_PERSON = 240; // 4 hours for people
@@ -68,20 +69,36 @@ export function createTelegramBot(options: {
     // Don't store command messages - they shouldn't be included in summaries
     const trimmed = text.trim();
     if (chatId && trimmed.length > 0 && !trimmed.startsWith("/")) {
+      const authorId = ctx.from?.id;
+      const timestampMs = (msg.date ?? Math.floor(Date.now() / 1000)) * 1000;
+      const authorUsername = ctx.from?.username ?? null;
+      const authorDisplay = ctx.from?.first_name
+        ? `${ctx.from.first_name}${ctx.from.last_name ? " " + ctx.from.last_name : ""}`
+        : ctx.from?.username ?? null;
+
       addTelegramMessage(chatId, {
         messageId: msg.message_id,
         text,
-        timestampMs: (msg.date ?? Math.floor(Date.now() / 1000)) * 1000,
-        authorId: ctx.from?.id,
-        authorUsername: ctx.from?.username ?? null,
-        authorDisplay: ctx.from?.first_name
-          ? `${ctx.from.first_name}${ctx.from.last_name ? " " + ctx.from.last_name : ""}`
-          : ctx.from?.username ?? null,
+        timestampMs,
+        authorId,
+        authorUsername,
+        authorDisplay,
         replyToMessageId:
           msg.reply_to_message && "message_id" in msg.reply_to_message
             ? msg.reply_to_message.message_id
             : undefined,
       });
+
+      // Update user context if we have an author ID (reaction count will be 0 initially)
+      if (authorId) {
+        updateUserContext("telegram", String(authorId), {
+          text,
+          username: authorUsername,
+          displayName: authorDisplay,
+          reactionCount: 0, // Will be updated when reactions come in
+          timestampMs,
+        });
+      }
     }
     return next();
   });
