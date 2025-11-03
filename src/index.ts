@@ -1385,7 +1385,7 @@ const server = Bun.serve({
     <header>
       <div class="logo"></div>
       <h1>CumBot</h1>
-      <p class="lead">Summon /Cum to wax spout nonsense about topics or people in your group chats.<br><br>A distracted philosopher who lives in Discord & Telegram.</p>
+      <p class="lead">Summon /Cum to spout nonsense about topics or people in your group chats.<br><br>A distracted philosopher who lives in Discord & Telegram.</p>
     </header>
 
     <section>
