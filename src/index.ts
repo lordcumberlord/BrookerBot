@@ -1190,9 +1190,9 @@ const server = Bun.serve({
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CumBot</title>
-  <meta name="description" content="Summon /Cum to philosophize about topics or people in your Discord & Telegram chats. Pay $1.00 via x402.">
+  <meta name="description" content="gib $1 via x402 and see what shit I come up with">
   <meta property="og:title" content="CumBot">
-  <meta property="og:description" content="Summon /Cum to philosophize about topics or people in your Discord & Telegram chats. Pay $1.00 via x402.">
+  <meta property="og:description" content="gib $1 via x402 and see what shit I come up with">
   <meta property="og:type" content="website">
   <meta property="og:url" content="${origin}/download">
   <meta property="og:image" content="${ogImageUrl}">
@@ -1201,7 +1201,7 @@ const server = Bun.serve({
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="CumBot">
-  <meta name="twitter:description" content="Summon /Cum to philosophize about topics or people in your Discord & Telegram chats. Pay $1.00 via x402.">
+  <meta name="twitter:description" content="gib $1 via x402 and see what shit I come up with">
   <meta name="twitter:image" content="${ogImageUrl}">
   <style>
     :root {
