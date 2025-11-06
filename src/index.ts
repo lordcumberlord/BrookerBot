@@ -1021,7 +1021,7 @@ const server = Bun.serve({
           payTo: payToAddress,
           maxAmountRequired: "50000", // 0.05 USDC (50000 / 10^6)
           maxTimeoutSeconds: 300,
-          network: "base" as const,
+          network: ((process.env.NETWORK || "base").toLowerCase()) as const,
           asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
           extra: {
             name: "USD Coin",
@@ -1148,6 +1148,7 @@ const server = Bun.serve({
         const appResponseClone = appResponse.clone();
         let settlement;
         let settlementTimedOut = false;
+        let settlementError = false;
         try {
           console.log("[payment] 🔄 Attempting settlement...");
           console.log("[payment] Settlement inputs:", {
@@ -1208,15 +1209,11 @@ const server = Bun.serve({
                   : JSON.stringify(error.response.data).substring(0, 500),
               } : undefined,
             });
-            // For non-timeout errors, still return error (could be invalid payment)
-            return Response.json(
-              {
-                error: "Failed to settle payment",
-                accepts: paymentRequirements,
-                x402Version,
-              },
-              { status: 402 }
-            );
+            // For non-timeout errors, log but continue - payment was already verified
+            // Settlement failures shouldn't block the response if payment verification passed
+            console.warn("[payment] ⚠️ WARNING: Settlement failed but payment was verified - proceeding with response");
+            settlementError = true;
+            // Don't return error - continue to return the app response
           }
         }
 

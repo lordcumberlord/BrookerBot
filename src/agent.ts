@@ -103,7 +103,7 @@ const configOverrides: AgentKitConfig = {
       (process.env.PAY_TO as `0x${string}`) ??
       "0xc989ead84f34a0532a74cb4d6dd8fcdb91a6aa69"
     ).toLowerCase() as `0x${string}`,
-    network: (process.env.NETWORK as any) ?? "base",
+    network: ((process.env.NETWORK as any) ?? "base").toLowerCase() as any,
     defaultPrice: process.env.DEFAULT_PRICE ?? "0.05",
     // Add token configuration for USDC
     // Note: x402 may require token address in payment headers, not config
