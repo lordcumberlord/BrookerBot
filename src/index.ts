@@ -1048,6 +1048,12 @@ const server = Bun.serve({
         try {
           decodedPayment = exact.evm.decodePayment(hasPaymentHeader);
           decodedPayment.x402Version = x402Version;
+          console.log("[payment] Decoded payment structure:", {
+            keys: Object.keys(decodedPayment),
+            hasAmount: 'amount' in decodedPayment,
+            hasResource: 'resource' in decodedPayment,
+            fullStructure: JSON.stringify(decodedPayment, null, 2).substring(0, 500),
+          });
         } catch (error) {
           console.error("[payment] Failed to decode X-PAYMENT header", error);
           return Response.json(
@@ -1169,8 +1175,10 @@ const server = Bun.serve({
           console.log("[payment] 🔄 Starting settlement with facilitator...");
           console.log("[payment] Settlement request details:", {
             facilitatorUrl,
+            decodedPaymentKeys: Object.keys(decodedPayment),
             decodedPaymentResource: decodedPayment.resource,
             decodedPaymentAmount: decodedPayment.amount,
+            decodedPaymentPayload: decodedPayment.payload ? (typeof decodedPayment.payload === 'object' ? Object.keys(decodedPayment.payload) : decodedPayment.payload) : undefined,
             selectedRequirementsResource: selectedPaymentRequirements.resource,
             selectedRequirementsPayTo: selectedPaymentRequirements.payTo,
             selectedRequirementsMaxAmount: selectedPaymentRequirements.maxAmountRequired,
