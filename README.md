@@ -1,31 +1,57 @@
-## dreams
+# BrookerBot
 
-This project was scaffolded with `create-agent-kit` and ships with a ready-to-run agent app built on [`@lucid-dreams/agent-kit`](https://www.npmjs.com/package/@lucid-dreams/agent-kit).
+A Telegram bot that generates blistering Charlie Brooker-style rants about any topic or person. Channel the vitriolic spirit of Black Mirror's creator on demand.
 
-### Quick start
+## Features
 
-```sh
-bun install
-bun run dev
-```
+- **`/rant <topic>`** - Generate a blistering, rambling rant in Charlie Brooker's signature style
+- **x402 Payments** - Pay $1.00 USDC via x402 for each rant
+- **Telegram Integration** - Works directly in Telegram chats
 
-The dev command runs `bun` in watch mode, starts the HTTP server, and reloads when you change files inside `src/`.
+## Quick Start
 
-### Project structure
+1. **Install dependencies:**
+   ```sh
+   bun install
+   ```
 
-- `src/agent.ts` – defines your agent manifest and entrypoints.
-- `src/index.ts` – boots a Bun HTTP server with the agent.
+2. **Set up environment variables:**
+   Create a `.env` file with:
+   ```
+   TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+   AGENT_URL=your_agent_url
+   FACILITATOR_URL=https://facilitator.x402.rs
+   PAY_TO=your_payment_address
+   ENTRYPOINT_PRICE=1.00
+   PAYMENT_CURRENCY=USDC
+   ```
 
-### Available scripts
+3. **Run the bot:**
+   ```sh
+   bun run dev
+   ```
 
-- `bun run dev` – start the agent in watch mode.
-- `bun run start` – start the agent once.
-- `bun run agent` – run the agent module directly (helpful for quick experiments).
-- `bunx tsc --noEmit` – type-check the project.
+## Usage
 
-### Next steps
+1. Add the bot to your Telegram chat
+2. Send `/rant <topic>` or `/rant <person>` 
+3. Pay $1.00 USDC via x402
+4. Receive your vitriolic rant in the chat
 
-- Update `src/agent.ts` with your use case.
-- Wire up `@lucid-dreams/agent-kit` configuration and secrets (see `AGENTS.md` in the repo for details).
-- Copy `.env.example` to `.env` and fill in the values for your environment.
-- Deploy with your preferred Bun-compatible platform when you're ready.
+## Project Structure
+
+- `src/agent.ts` – Defines the agent manifest and rant entrypoint
+- `src/index.ts` – HTTP server with payment handling and Telegram callbacks
+- `src/telegram.ts` – Telegram bot command handlers
+- `src/pending.ts` – Payment callback state management
+
+## Available Scripts
+
+- `bun run dev` – Start the bot in watch mode
+- `bun run start` – Start the bot once
+- `bun run agent` – Run the agent module directly
+- `bunx tsc --noEmit` – Type-check the project
+
+## Deployment
+
+Deploy to any Bun-compatible platform (e.g., Railway, Fly.io). Make sure to set all required environment variables in your deployment platform.

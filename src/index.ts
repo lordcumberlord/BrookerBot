@@ -1,44 +1,23 @@
-import { app, executeSummariseChat } from "./agent";
+import { app } from "./agent";
 import { exact } from "x402/schemes";
 import { findMatchingPaymentRequirements } from "x402/shared";
 import { useFacilitator } from "x402/verify";
 import { settleResponseHeader } from "x402/types";
-import nacl from "tweetnacl";
-import { MAX_LOOKBACK_MINUTES, validateLookback } from "./lookback";
 import { PAYMENT_CALLBACK_EXPIRY_MS } from "./constants";
 import {
-  pendingDiscordCallbacks,
   pendingTelegramCallbacks,
 } from "./pending";
 import { createTelegramBot } from "./telegram";
 
 const port = Number(process.env.PORT ?? 8787);
-const PUBLIC_KEY = process.env.DISCORD_PUBLIC_KEY;
-const DISCORD_API_DEFAULT_BASE = "https://discord.com/api/v10";
 
 // Payment constants
 const USDC_DECIMALS = 6;
 const DEFAULT_PRICE_USDC = BigInt(1000000); // 1.00 USDC (1000000 / 10^6)
-const EPHEMERAL_FLAG = 1 << 6;
-
-function makeEphemeralResponse(message: string): Response {
-  return Response.json({
-    type: 4,
-    data: {
-      content: message,
-      flags: EPHEMERAL_FLAG,
-    },
-  });
-}
 
 // Clean up expired callbacks every 30 minutes
 setInterval(() => {
   const now = Date.now();
-  for (const [token, data] of pendingDiscordCallbacks.entries()) {
-    if (data.expiresAt < now) {
-      pendingDiscordCallbacks.delete(token);
-    }
-  }
   for (const [token, data] of pendingTelegramCallbacks.entries()) {
     if (data.expiresAt < now) {
       pendingTelegramCallbacks.delete(token);
@@ -46,476 +25,7 @@ setInterval(() => {
   }
 }, 30 * 60 * 1000);
 
-// Discord signature verification using Ed25519
-function verifyDiscordRequest(
-  body: string,
-  signature: string,
-  timestamp: string
-): boolean {
-  if (!PUBLIC_KEY) {
-    console.warn("[discord] DISCORD_PUBLIC_KEY not set, skipping signature verification");
-    return false; // Don't allow if PUBLIC_KEY is required
-  }
-
-  try {
-    // Convert hex strings to Uint8Arrays
-    const publicKeyBytes = Uint8Array.from(
-      Buffer.from(PUBLIC_KEY, "hex")
-    );
-    const signatureBytes = Uint8Array.from(
-      Buffer.from(signature, "hex")
-    );
-
-    // Discord signs: timestamp + body
-    const message = new TextEncoder().encode(timestamp + body);
-
-    // Verify signature using Ed25519
-    const isValid = nacl.sign.detached.verify(message, signatureBytes, publicKeyBytes);
-    
-    if (!isValid) {
-      console.warn("[discord] Signature verification failed");
-    }
-    
-    return isValid;
-  } catch (error) {
-    console.error("[discord] Signature verification error:", error);
-    return false;
-  }
-}
-
-// Handle Discord interactions
-async function handleDiscordInteraction(req: Request): Promise<Response> {
-  try {
-    console.log("[discord] Handling interaction...");
-    const signature = req.headers.get("x-signature-ed25519");
-    const timestamp = req.headers.get("x-signature-timestamp");
-
-    const body = await req.text();
-    console.log("[discord] Body received, length:", body.length);
-    
-    // Verify signature FIRST (before parsing) - required for Discord verification
-    if (PUBLIC_KEY) {
-      if (!signature || !timestamp) {
-        console.warn("[discord] Missing signature headers");
-        return Response.json({ error: "Missing signature headers" }, { status: 401 });
-      }
-
-      const isValid = verifyDiscordRequest(body, signature, timestamp);
-      if (!isValid) {
-        console.warn("[discord] Invalid signature");
-        // Try to parse to see if it's a PING for better error message
-        try {
-          const interaction = JSON.parse(body);
-          if (interaction.type === 1) {
-            console.error("[discord] PING verification failed - check DISCORD_PUBLIC_KEY in Railway");
-          }
-        } catch (e) {
-          // Ignore parse errors
-        }
-        return Response.json({ error: "Invalid signature" }, { status: 401 });
-      }
-      console.log("[discord] Signature verified successfully");
-    } else {
-      console.warn("[discord] DISCORD_PUBLIC_KEY not set - signature verification disabled");
-    }
-    
-    // Parse interaction after signature verification
-    let interaction;
-    try {
-      interaction = JSON.parse(body);
-      console.log("[discord] Interaction parsed, type:", interaction.type);
-    } catch (e) {
-      console.error("[discord] Failed to parse interaction body:", e);
-      return Response.json({ error: "Invalid JSON" }, { status: 400 });
-    }
-
-    // Handle PING (Discord's verification) - respond immediately
-    if (interaction.type === 1) {
-      console.log("[discord] Received PING (verification), responding with PONG");
-      return Response.json({ type: 1 });
-    }
-
-    // Handle APPLICATION_COMMAND
-    if (interaction.type === 2) {
-      console.log("[discord] Received APPLICATION_COMMAND");
-      const { name, options } = interaction.data || {};
-      console.log("[discord] Command name:", name);
-      // channel_id and guild_id are at the interaction level, not in data
-      const channel_id = interaction.channel_id || interaction.channel?.id;
-      const guild_id = interaction.guild_id || interaction.guild?.id;
-
-      if (name === "cum") {
-        console.log("[discord] Processing /cum command");
-        // Get "for" option (required) and "minutes" option (optional)
-        const forOption = options?.find((opt: any) => opt.name === "for");
-        const minutesOption = options?.find((opt: any) => opt.name === "minutes");
-        
-        if (!forOption?.value) {
-          return makeEphemeralResponse(`Usage: /cum for <topic> or /cum for @username`);
-        }
-        
-        let query = String(forOption.value).trim();
-        if (!query) {
-          return makeEphemeralResponse(`Please specify a topic or @username`);
-        }
-        
-        // Handle "me" - convert to the user who sent the command
-        if (query.toLowerCase() === "me" || query.toLowerCase() === "@me") {
-          const userId = interaction.user?.id || interaction.member?.user?.id;
-          if (userId) {
-            query = `<@${userId}>`; // Discord mention format
-          } else {
-            return makeEphemeralResponse(`Could not determine your user ID`);
-          }
-        }
-        
-        // Determine if this is a person query (starts with @ or <@)
-        const isPersonQuery = query.startsWith("@") || query.match(/^<@\d+>/);
-        
-        // Use 4 hours (240 minutes) default for person queries, 60 minutes for topics
-        const defaultLookback = isPersonQuery ? 240 : 60;
-        
-        const lookbackValidation = validateLookback(minutesOption?.value ?? defaultLookback);
-        if ("error" in lookbackValidation) {
-          return makeEphemeralResponse(`❌ ${lookbackValidation.error}`);
-        }
-
-        const { minutes: lookbackMinutes } = lookbackValidation;
-
-        // Validate required fields
-        if (!channel_id) {
-          console.error(`[discord] Missing channel_id in interaction:`, JSON.stringify(interaction, null, 2));
-          const followupUrl = `${process.env.DISCORD_API_BASE_URL ?? DISCORD_API_DEFAULT_BASE}/webhooks/${interaction.application_id}/${interaction.token}`;
-          await fetch(followupUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              content: "❌ Error: Could not determine channel ID from interaction.",
-            }),
-          });
-          return Response.json({ error: "Missing channel_id" }, { status: 400 });
-        }
-
-        // Respond immediately with "thinking"
-        const initialResponse = Response.json({
-          type: 5, // DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
-        });
-
-        // Process in background - route through x402 payment-enabled entrypoint
-        (async () => {
-          try {
-          console.log(`[discord] Cum request: channel=${channel_id}, guild=${guild_id}, query="${query}", minutes=${lookbackMinutes}`);
-
-          const baseUrl =
-            process.env.DISCORD_API_BASE_URL ?? DISCORD_API_DEFAULT_BASE;
-          const followupUrl = `${baseUrl}/webhooks/${interaction.application_id}/${interaction.token}`;
-
-          // Call the agent-kit entrypoint (which handles x402 payments)
-          const agentBaseUrl = process.env.AGENT_URL || `https://cumbot-production.up.railway.app`;
-          const entrypointUrl = `${agentBaseUrl}/entrypoints/Cum%20For/invoke`;
-
-          // Ensure channel_id is valid
-          if (!channel_id || typeof channel_id !== "string" || channel_id.trim() === "") {
-            throw new Error(`Invalid channel_id: ${channel_id}. Please try the command again.`);
-          }
-          // Make request to entrypoint (without payment headers - it will return payment instructions)
-          const entrypointResponse = await fetch(entrypointUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              input: {
-                channelId: channel_id.trim(),
-                serverId: guild_id || undefined,
-                query,
-                lookbackMinutes,
-                platform: "discord",
-              },
-            }),
-          });
-
-          const responseData = await entrypointResponse.json();
-
-          // Check for validation errors
-          if (entrypointResponse.status === 400) {
-            const errorMsg = responseData.error?.issues?.[0]?.message || responseData.error?.message || "Validation error";
-            console.error(`[discord] Entrypoint validation error:`, responseData);
-            await fetch(followupUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                content: `❌ **Validation Error**\n${errorMsg}\n\nIf this persists, please check Railway logs for details.`,
-              }),
-            });
-            return;
-          }
-
-          // Check for permission errors (403) - provide helpful guidance
-          if (entrypointResponse.status === 500) {
-            const errorMessage = responseData.error?.message || "";
-            const errorCode = responseData.error?.code || responseData.code;
-            // Discord error code 50001 = "Missing Access" (missing permissions)
-            if (errorMessage.includes("Missing Access") || errorMessage.includes("50001") || errorCode === 50001) {
-              console.error(`[discord] Permission error (code: ${errorCode || "unknown"}):`, responseData);
-              await fetch(followupUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  content: `❌ **Permission Error (Discord Code: 50001)**\n\nThe bot needs permission to read messages in this channel.\n\n**Fix:**\n1. Re-invite the bot using: https://discord.com/oauth2/authorize?client_id=1434528093149724762&scope=bot&permissions=17180200000\n2. Go to **Server Settings** → **Roles** → Select **CumBot**\n3. Enable: **View Channels**, **Read Message History**\n4. Go to **Channel Settings** → **Permissions** → **CumBot**\n5. Enable: **View Channel**, **Read Message History**\n\nIf the bot role is lower than other roles, move it higher in the role list.`,
-                }),
-              });
-              return;
-            }
-          }
-
-          // Log the response status for debugging
-          console.log(`[discord] Entrypoint response status: ${entrypointResponse.status}`);
-
-          // Check if payment is required (402 or payment_required error)
-          // Also check if the response indicates payment was needed but wasn't provided
-          let requiresPayment = 
-            entrypointResponse.status === 402 || 
-            responseData.error?.code === "payment_required" ||
-            responseData.payment_required === true ||
-            (entrypointResponse.headers.get("x-payment-required") === "true");
-
-          // If we got a successful response but payment should be required, 
-          // we need to enforce payment manually
-          // Agent-kit may not enforce payment automatically for internal calls
-          // For Discord commands, we should ALWAYS require payment via x402
-          if (entrypointResponse.status === 200 && !requiresPayment) {
-            console.log(`[discord] Entrypoint returned success without payment - enforcing payment requirement for Discord`);
-            requiresPayment = true;
-          }
-
-          if (requiresPayment) {
-            const callbackParam = encodeURIComponent(interaction.token);
-            const paymentUrl = `${agentBaseUrl}/pay?source=discord&channelId=${channel_id}&serverId=${guild_id || ""}&query=${encodeURIComponent(query)}&lookbackMinutes=${lookbackMinutes}&discord_callback=${callbackParam}`;
-            
-            // Get price from entrypoint config or default
-            const price = process.env.ENTRYPOINT_PRICE || "1.00";
-            const currency = process.env.PAYMENT_CURRENCY || "USDC";
-            
-            const paymentMessage = `🪙 **Payment Required**
-
-/Cum for "${query}" — pay **$${price} ${currency}** via x402.
-
-🔗 **Pay:** [Click here](${paymentUrl})
-
-After payment, /Cum's response will appear here.`;
-
-            let paymentMessageId: string | undefined;
-            const followupResponse = await fetch(followupUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                content: paymentMessage,
-              }),
-            });
-
-            if (!followupResponse.ok) {
-              const errorText = await followupResponse.text();
-              console.error(`[discord] Failed to send follow-up: ${followupResponse.status} ${errorText}`);
-              return;
-            }
-
-            try {
-              const followupData = await followupResponse.json();
-              if (followupData && followupData.id) {
-                paymentMessageId = String(followupData.id);
-              }
-            } catch (jsonError) {
-              console.warn("[discord] Unable to parse follow-up response JSON", jsonError);
-            }
-
-            pendingDiscordCallbacks.set(interaction.token, {
-              applicationId: interaction.application_id,
-              channelId: channel_id,
-              guildId: guild_id,
-              query,
-              lookbackMinutes,
-              paymentMessageId,
-              expiresAt: Date.now() + PAYMENT_CALLBACK_EXPIRY_MS,
-            });
-            return;
-          }
-
-          if (!entrypointResponse.ok) {
-            throw new Error(`Entrypoint error: ${entrypointResponse.status} ${JSON.stringify(responseData)}`);
-          }
-
-          // Success - format and send result
-          const output = responseData.output || responseData;
-          let content = `**Summary**\n${output.summary || "No summary available"}\n\n`;
-          
-          console.log(`[discord] Summary completed: ${(output.summary || "").substring(0, 50)}...`);
-
-          const followupResponse = await fetch(followupUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              content,
-            }),
-          });
-
-          if (!followupResponse.ok) {
-            const errorText = await followupResponse.text();
-            console.error(`[discord] Failed to send follow-up: ${followupResponse.status} ${errorText}`);
-            throw new Error(`Failed to send response: ${followupResponse.status}`);
-          }
-
-          console.log(`[discord] Successfully sent summary response`);
-        } catch (error: any) {
-          console.error(`[discord] Error processing command:`, error);
-          const errorMsg = error.message || "An error occurred";
-          const baseUrl =
-            process.env.DISCORD_API_BASE_URL ?? DISCORD_API_DEFAULT_BASE;
-          const followupUrl = `${baseUrl}/webhooks/${interaction.application_id}/${interaction.token}`;
-
-          try {
-            const errorResponse = await fetch(followupUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                content: `❌ Error: ${errorMsg}`,
-              }),
-            });
-
-            if (!errorResponse.ok) {
-              const errorText = await errorResponse.text();
-              console.error(`[discord] Failed to send error message: ${errorResponse.status} ${errorText}`);
-            }
-          } catch (fetchError) {
-            console.error(`[discord] Failed to send error response:`, fetchError);
-          }
-        }
-        })();
-
-        console.log("[discord] Returning deferred response immediately");
-        return initialResponse;
-      }
-    }
-
-    return Response.json({ error: "Unknown interaction type" }, { status: 400 });
-  } catch (error: any) {
-    console.error("[discord] Error handling interaction:", error);
-    return Response.json(
-      { error: "Internal server error", message: error?.message },
-      { status: 500 }
-    );
-  }
-}
-
-// Handle Discord callback after payment
-async function handleDiscordCallback(req: Request): Promise<Response> {
-  console.log("[discord-callback] === CALLBACK RECEIVED ===");
-  try {
-    const body = await req.json();
-    console.log("[discord-callback] Request body keys:", Object.keys(body));
-    const { discord_token, result } = body;
-
-    if (!discord_token) {
-      console.error("[discord-callback] Missing discord_token in request");
-      return Response.json({ error: "Missing discord_token" }, { status: 400 });
-    }
-
-    // Decode the token (it was URL-encoded when passed in the payment URL)
-    const decodedToken = decodeURIComponent(discord_token);
-    console.log("[discord-callback] Decoded token prefix:", decodedToken.substring(0, 50) + "...");
-    
-    const callbackData = pendingDiscordCallbacks.get(decodedToken);
-    if (!callbackData) {
-      console.error(`[discord-callback] Token not found or expired: ${decodedToken.substring(0, 30)}...`);
-      console.error(`[discord-callback] Available tokens count: ${pendingDiscordCallbacks.size}`);
-      return Response.json({ error: "Invalid or expired callback token" }, { status: 404 });
-    }
-    
-    console.log("[discord-callback] Found callback data for token, processing...");
-
-    // Remove from pending immediately
-    pendingDiscordCallbacks.delete(decodedToken);
-
-    // Prepare Discord posting - do it with a timeout so we don't block too long
-    const baseUrl = process.env.DISCORD_API_BASE_URL ?? DISCORD_API_DEFAULT_BASE;
-    const followupUrl = `${baseUrl}/webhooks/${callbackData.applicationId}/${decodedToken}`;
-
-    const output = result?.output || result;
-    
-    // Extract response from CumBot
-    const content = (output?.response || output?.summary || "something broke in my head").trim();
-    
-    // Send to Discord - try to complete it quickly, but don't block forever
-    // Use Promise.race with a timeout so we return within 5 seconds max
-    try {
-      await Promise.race([
-        (async () => {
-          const followupResponse = await fetch(followupUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              content,
-            }),
-          });
-
-          if (!followupResponse.ok) {
-            const errorText = await followupResponse.text();
-            console.error(`[discord] Failed to send callback result: ${followupResponse.status} ${errorText}`);
-            return;
-          }
-
-          if (callbackData.paymentMessageId) {
-            const editUrl = `${followupUrl}/messages/${callbackData.paymentMessageId}`;
-            const editResponse = await fetch(editUrl, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                content: "✅ Payment received. Summary posted below.",
-              }),
-            });
-
-            if (!editResponse.ok) {
-              const editError = await editResponse.text();
-              console.warn(`[discord] Failed to edit payment message: ${editResponse.status} ${editError}`);
-            }
-          }
-
-          console.log(`[discord] Successfully sent callback result to Discord`);
-        })(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("Discord API timeout")), 5000)
-        )
-      ]);
-    } catch (error: any) {
-      // If timeout or error, log it but still return success
-      // The background task will continue if it hasn't been garbage collected
-      console.error("[discord] Error or timeout posting to Discord:", error);
-      // Fire off a background task to retry if needed
-      setTimeout(async () => {
-        try {
-          const retryResponse = await fetch(followupUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content }),
-          });
-          if (retryResponse.ok) {
-            console.log(`[discord] Successfully sent callback result on retry`);
-          }
-        } catch (retryError) {
-          console.error("[discord] Retry also failed:", retryError);
-        }
-      }, 100);
-    }
-
-    // Return success
-    return Response.json({ success: true });
-  } catch (error: any) {
-    console.error("[discord] Error handling callback:", error);
-    return Response.json(
-      { error: "Internal server error", message: error?.message },
-      { status: 500 }
-    );
-  }
-}
-
+// Handle Telegram callback after payment
 async function handleTelegramCallback(req: Request): Promise<Response> {
   try {
     const body = await req.json();
@@ -542,8 +52,26 @@ async function handleTelegramCallback(req: Request): Promise<Response> {
     }
 
     const output = result?.output || result;
-    // Extract response from CumBot
-    const messageText = (output?.response || output?.summary || output?.text || "something broke in my head").trim();
+    // Extract rant from BrookerBot
+    const messageText = (output?.rant || "").trim();
+    
+    if (!messageText) {
+      const fallbackText = `Right, so I tried to generate a rant about "${callbackData.topic || "the topic"}" and... nothing. The rage is there, the vitriol is there, but the words? The words have left the building. This is a meta-rant about the inability to rant, which is actually quite on-brand for BrookerBot.`;
+      
+      const sendUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+      await fetch(sendUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: callbackData.chatId,
+          text: fallbackText,
+        }),
+      });
+      
+      return Response.json({ success: true });
+    }
+    
+    const formattedMessage = `**BrookerBot Rant**\n\n${messageText}`;
 
     // Send to Telegram - try to complete it quickly, but don't block forever
     try {
@@ -555,7 +83,8 @@ async function handleTelegramCallback(req: Request): Promise<Response> {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               chat_id: callbackData.chatId,
-              text: messageText,
+              text: formattedMessage,
+              parse_mode: "Markdown",
             }),
           });
 
@@ -599,7 +128,8 @@ async function handleTelegramCallback(req: Request): Promise<Response> {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               chat_id: callbackData.chatId,
-              text: messageText,
+              text: formattedMessage,
+              parse_mode: "Markdown",
             }),
           });
           if (retryResponse.ok) {
@@ -634,26 +164,7 @@ const server = Bun.serve({
         return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain" } });
       }
 
-    // Discord interactions endpoint
-    if (url.pathname === "/interactions") {
-      if (req.method === "POST") {
-        return handleDiscordInteraction(req);
-      }
-      // Allow GET for testing
-      if (req.method === "GET") {
-        return Response.json({ 
-          status: "ok", 
-          message: "Discord interactions endpoint is active",
-          publicKey: PUBLIC_KEY ? "set" : "not set"
-        });
-      }
-    }
-
-    // Discord payment callback endpoint
-    if (url.pathname === "/discord-callback" && req.method === "POST") {
-      return handleDiscordCallback(req);
-    }
-
+    // Telegram payment callback endpoint
     if (url.pathname === "/telegram-callback" && req.method === "POST") {
       return handleTelegramCallback(req);
     }
@@ -661,7 +172,7 @@ const server = Bun.serve({
     // Serve CumBot OG image
     if (url.pathname === "/assets/cumbot-og.png" && req.method === "GET") {
       try {
-        const file = Bun.file("public/assets/cumbot-og.png");
+        const file = Bun.file("public/assets/brookerbot-og.png");
         if (await file.exists()) {
           return new Response(file, {
             headers: {
@@ -671,7 +182,7 @@ const server = Bun.serve({
           });
         }
       } catch (error) {
-        console.warn(`[assets] Could not load cumbot-og.png: ${error}`);
+        console.warn(`[assets] Could not load brookerbot-og.png: ${error}`);
       }
       // Return 404 if file doesn't exist
       return new Response("Image not found", { status: 404 });
@@ -714,7 +225,7 @@ const server = Bun.serve({
   </g>
   <g transform="translate(420 215)">
     <text x="0" y="0" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="72" font-weight="700" fill="#f8fafc">x402 Summariser Bot</text>
-    <text x="0" y="96" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="34" fill="rgba(226,232,240,0.88)">Summarise your Discord &amp; Telegram chats for $0.05 via x402.</text>
+    <text x="0" y="96" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="34" fill="rgba(226,232,240,0.88)">Generate blistering Charlie Brooker-style rants via x402.</text>
   </g>
 </svg>`;
       return new Response(svg, {
@@ -727,54 +238,36 @@ const server = Bun.serve({
 
     // Payment page - handles GET requests and shows payment UI
     if (url.pathname === "/pay" && req.method === "GET") {
-      const source = url.searchParams.get("source") ?? "discord";
-      const channelId = url.searchParams.get("channelId");
+      const source = url.searchParams.get("source") ?? "telegram";
       const chatId = url.searchParams.get("chatId");
-      const serverId = url.searchParams.get("serverId");
-      const query = url.searchParams.get("query");
-      const lookbackMinutesParam = url.searchParams.get("lookbackMinutes");
-      const discordCallback = url.searchParams.get("discord_callback");
+      const topic = url.searchParams.get("topic");
+      const command = url.searchParams.get("command");
       const telegramCallback = url.searchParams.get("telegram_callback");
 
-      const usingTelegram = source === "telegram";
-      const primaryId = usingTelegram ? chatId : channelId;
-
-      if (!primaryId || !query || lookbackMinutesParam === null) {
-        return Response.json({ error: "Missing required parameters" }, { status: 400 });
+      if (!topic || command !== "rant") {
+        return Response.json({ error: "Missing topic parameter for rant command" }, { status: 400 });
       }
-
-      const lookbackValidation = validateLookback(lookbackMinutesParam);
-      if ("error" in lookbackValidation) {
-        return Response.json({ error: lookbackValidation.error }, { status: 400 });
-      }
-
-      const { minutes: lookbackMinutes } = lookbackValidation;
 
       const agentBaseUrl =
-        process.env.AGENT_URL || `https://cumbot-production.up.railway.app`;
-      const entrypointPath = "Cum%20For";
+        process.env.AGENT_URL || `https://brookerbot-production.up.railway.app`;
+      const entrypointPath = "rant";
       const entrypointUrl = `${agentBaseUrl}/entrypoints/${entrypointPath}/invoke`;
       const price = process.env.ENTRYPOINT_PRICE || "1.00";
       const currency = process.env.PAYMENT_CURRENCY || "USDC";
 
-      const heading = `🪙 Cum for '${query}'`;
-      const entityLabel = usingTelegram ? "Chat ID" : "Channel ID";
-      const postPaymentPrompt = usingTelegram
-        ? "After payment, CumBot's response will automatically appear in Telegram."
-        : "After payment, CumBot's response will automatically appear in Discord.";
+      const heading = `🔥 BrookerBot Rant`;
+      const entityLabel = "Topic";
+      const postPaymentPrompt = "After payment, your rant will automatically appear in Telegram.";
 
       const origin = url.origin;
-      const logoUrl = `${origin}/assets/cumbot-og.png`;
+      const logoUrl = `${origin}/assets/brookerbot-og.png`;
 
       const pageConfig = {
         source,
-        channelId,
         chatId,
-        serverId,
-        query,
-        lookbackMinutes,
+        topic,
+        command,
         entrypointUrl,
-        discordCallback,
         telegramCallback,
       };
 
@@ -851,7 +344,7 @@ const server = Bun.serve({
     <h1>${heading}</h1>
     <div class="info">
       <p><strong>Price:</strong> $${price} ${currency}</p>
-      <p><strong>${entityLabel}:</strong> ${primaryId}</p>
+      <p><strong>${entityLabel}:</strong> ${topic}</p>
     </div>
     <p style="text-align: center; color: #cbd5f5;">Click below to pay via x402. ${postPaymentPrompt}</p>
     <button class="button" onclick="pay()">Pay $${price} ${currency}</button>
@@ -1014,7 +507,7 @@ const server = Bun.serve({
         });
         
         // Wrap fetch with payment handling (pass viem wallet client)
-        // maxValue: $1.00 USDC = 1000000 (6 decimals) for CumBot
+        // maxValue: $1.00 USDC = 1000000 (6 decimals) for BrookerBot
         // Note: x402 uses EIP-3009 for gasless transactions - facilitator pays gas
         const x402Fetch = wrapFetchWithPayment(fetch, walletClient, BigInt(1000000));
         
@@ -1022,20 +515,9 @@ const server = Bun.serve({
         
         status.innerHTML = '<p>🪙 Processing payment (gasless via facilitator)...</p>';
         
-        const requestInput = cfg.source === 'telegram'
-          ? {
-              chatId: cfg.chatId,
-              query: cfg.query,
-              platform: 'telegram',
-              lookbackMinutes: cfg.lookbackMinutes
-            }
-          : {
-              channelId: cfg.channelId,
-              serverId: cfg.serverId || undefined,
-              query: cfg.query,
-              platform: 'discord',
-              lookbackMinutes: cfg.lookbackMinutes
-            };
+        const requestInput = {
+          topic: cfg.topic
+        };
 
         console.log('📋 Request details:', {
           url: entrypointUrl,
@@ -1159,11 +641,11 @@ const server = Bun.serve({
         }
         
         const successMarkup = (hash) => {
-          const destination = cfg.source === 'telegram' ? 'Telegram' : 'Discord';
+          const destination = 'Telegram';
           if (!hash) {
             return '<div style="color: #117a39;">' +
               '<p style="font-size: 20px; margin: 0 0 8px;">✅ Payment complete!</p>' +
-              '<p style="font-size: 13px; color: #1f5132; margin: 0;">Check ' + destination + ' for your summary.</p>' +
+              '<p style="font-size: 13px; color: #1f5132; margin: 0;">Check ' + destination + ' for your rant.</p>' +
               '</div>';
           }
 
@@ -1171,7 +653,7 @@ const server = Bun.serve({
           return '<div style="color: #117a39;">' +
             '<p style="font-size: 20px; margin: 0 0 8px;">✅ Payment complete!</p>' +
             '<p style="margin: 0 0 12px;">View on BaseScan: <a href="' + explorer + '" target="_blank" rel="noopener" style="color: #0b5e27;">' + hash + '</a></p>' +
-            '<p style="font-size: 13px; color: #1f5132; margin: 0;">Check ' + destination + ' for your summary.</p>' +
+            '<p style="font-size: 13px; color: #1f5132; margin: 0;">Check ' + destination + ' for your rant.</p>' +
             '</div>';
         };
 
@@ -1183,20 +665,6 @@ const server = Bun.serve({
         }
         
         if (response.ok) {
-          if (cfg.discordCallback) {
-            fetch('/discord-callback', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                discord_token: cfg.discordCallback,
-                result: data,
-              }),
-            }).catch(function(err) {
-              console.error('❌ Callback error:', err);
-              status.innerHTML += '<p style="color: orange;">⚠️ Payment successful but failed to send to Discord. Please contact support.</p>';
-            });
-          }
-
           if (cfg.telegramCallback) {
             fetch('/telegram-callback', {
               method: 'POST',
@@ -1239,21 +707,16 @@ const server = Bun.serve({
 
     if (url.pathname === "/download" && req.method === "GET") {
       const origin = url.origin;
-      const ogImageUrl = `${origin}/assets/cumbot-og.png`;
-      const discordAppId = process.env.DISCORD_APPLICATION_ID || "YOUR_APP_ID";
-      // Enhanced permissions: View Channels + Send Messages + Read Message History + Use External Emojis + Send Messages in Threads + Add Reactions
-      // Permissions calculated as sum (bitwise OR doesn't work with large numbers): 1024 + 2048 + 65536 + 262144 + 17179869184 + 64 = 17180200000
-      const permissions = String(17180200000); // Ensure it's a string for URL
-      const discordInviteUrl = `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(discordAppId)}&scope=bot&permissions=${permissions}`;
+      const ogImageUrl = `${origin}/assets/brookerbot-og.png`;
       return new Response(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CumBot - gib $1 via x402 and see what shit I come up with</title>
-  <meta name="description" content="gib $1 via x402 and see what shit I come up with">
-  <meta property="og:title" content="CumBot - gib $1 via x402 and see what shit I come up with">
-  <meta property="og:description" content="gib $1 via x402 and see what shit I come up with">
+  <title>BrookerBot - Generate blistering Charlie Brooker-style rants via x402</title>
+  <meta name="description" content="Generate blistering Charlie Brooker-style rants via x402">
+  <meta property="og:title" content="BrookerBot - Generate blistering Charlie Brooker-style rants via x402">
+  <meta property="og:description" content="Generate blistering Charlie Brooker-style rants via x402">
   <meta property="og:type" content="website">
   <meta property="og:url" content="${origin}/download">
   <meta property="og:image" content="${ogImageUrl}">
@@ -1261,8 +724,8 @@ const server = Bun.serve({
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="CumBot - gib $1 via x402 and see what shit I come up with">
-  <meta name="twitter:description" content="gib $1 via x402 and see what shit I come up with">
+  <meta name="twitter:title" content="BrookerBot - Generate blistering Charlie Brooker-style rants via x402">
+  <meta name="twitter:description" content="Generate blistering Charlie Brooker-style rants via x402">
   <meta name="twitter:image" content="${ogImageUrl}">
   <style>
     :root {
@@ -1445,16 +908,16 @@ const server = Bun.serve({
   <main class="page">
     <header>
       <div class="logo"></div>
-      <h1>CumBot</h1>
-      <p class="lead">Summon /Cum to spout nonsense about topics or people in your group chats.<br><br>A distracted philosopher who lives in Discord & Telegram.</p>
+      <h1>BrookerBot</h1>
+      <p class="lead">Generate blistering Charlie Brooker-style rants about any topic or person.<br><br>A vitriolic AI that channels the spirit of Black Mirror's creator.</p>
     </header>
 
     <section>
       <h2>How It Works</h2>
       <ol class="steps">
-        <li>Install the bot into your Discord server or Telegram chat.</li>
-        <li>Use <code>/Cum for &lt;topic&gt;</code> or <code>/Cum for @username</code> to request philosophical reflections.</li>
-        <li>Pay securely via x402 ($1.00), then receive a dry, ironic response right in your chat.</li>
+        <li>Install the bot into your Telegram chat.</li>
+        <li>Use <code>/rant &lt;topic&gt;</code> to request a blistering Charlie Brooker-style rant.</li>
+        <li>Pay securely via x402 ($1.00), then receive your vitriolic rant right in your chat.</li>
       </ol>
     </section>
 
@@ -1462,14 +925,9 @@ const server = Bun.serve({
       <h2>Download</h2>
       <div class="actions">
         <div class="action-card">
-          <h3>Discord Bot</h3>
-          <p>Add the bot to your server in seconds and start summoning /Cum immediately.</p>
-          <a class="button" href="${discordInviteUrl}" target="_blank" rel="noopener">Install on Discord</a>
-        </div>
-        <div class="action-card">
           <h3>Telegram Bot</h3>
-          <p>Add the bot to your chats and request philosophical reflections directly inside Telegram.</p>
-          <a class="button" href="https://t.me/x402CumBot" target="_blank" rel="noopener">Open in Telegram</a>
+          <p>Add the bot to your chats and request blistering rants directly inside Telegram.</p>
+          <a class="button" href="https://t.me/x402BrookerBot" target="_blank" rel="noopener">Open in Telegram</a>
         </div>
       </div>
     </section>
@@ -1482,17 +940,11 @@ const server = Bun.serve({
       });
     }
 
-    // Agent app routes - intercept entrypoint responses for Discord callbacks
+    // Agent app routes
     if (url.pathname.includes("/entrypoints/") && url.pathname.includes("/invoke")) {
-      const isSummariseEndpoint =
-        url.pathname.includes("summarise%20chat") ||
-        url.pathname.includes("summarise chat") ||
-        url.pathname.includes("summarise%20telegram%20chat") ||
-        url.pathname.includes("summarise telegram chat");
-      const isCumForEndpoint =
-        url.pathname.includes("Cum%20For") ||
-        url.pathname.includes("Cum For");
-      if (isSummariseEndpoint || isCumForEndpoint) {
+      const isRantEndpoint = url.pathname.includes("rant");
+      
+      if (isRantEndpoint) {
         const hasPaymentHeader = req.headers.get("X-PAYMENT");
         console.log(`[payment] Entrypoint called: ${url.pathname}`);
 
@@ -1500,22 +952,20 @@ const server = Bun.serve({
         let sourceLabel: string;
         let defaultPrice: string;
         
-        if (isCumForEndpoint) {
-          sourceLabel = "CumBot - Cum For";
+        if (isRantEndpoint) {
+          sourceLabel = "BrookerBot - Rant";
           defaultPrice = "1.00";
         } else {
-          sourceLabel = url.pathname.includes("telegram")
-            ? "Summarise Telegram chat"
-            : "Summarise Discord channel";
-          defaultPrice = "0.05";
+          sourceLabel = "BrookerBot";
+          defaultPrice = "1.00";
         }
 
         const payToAddress =
           process.env.PAY_TO || "0x68b08c4e17788af6c9d98a2cfde084ed9d6b53cd";
         const facilitatorUrl =
           process.env.FACILITATOR_URL || "https://facilitator.x402.rs";
-        const agentBaseUrl =
-          process.env.AGENT_URL || `https://cumbot-production.up.railway.app`;
+          const agentBaseUrl =
+        process.env.AGENT_URL || `https://brookerbot-production.up.railway.app`;
         const fullEntrypointUrl =
           agentBaseUrl + url.pathname + (url.search ? url.search : "");
         const price = process.env.ENTRYPOINT_PRICE || defaultPrice;
@@ -1759,53 +1209,6 @@ const server = Bun.serve({
           headers,
         });
 
-        const discordCallback = url.searchParams.get("discord_callback");
-
-        if (discordCallback) {
-          if (appResponseClone.status >= 200 && appResponseClone.status < 300) {
-            try {
-              const result = await appResponseClone.json();
-              const serverHost = process.env.AGENT_URL
-                ? new URL(process.env.AGENT_URL).origin
-                : url.origin;
-              const callbackUrl = `${serverHost}/discord-callback`;
-
-              console.log(`[discord] 🔔 Triggering callback to: ${callbackUrl}`);
-              console.log(`[discord] Callback payload:`, {
-                hasToken: !!discordCallback,
-                tokenLength: discordCallback?.length || 0,
-                hasResult: !!result,
-                resultKeys: result ? Object.keys(result) : [],
-              });
-
-              const callbackResponse = await fetch(callbackUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  discord_token: decodeURIComponent(discordCallback),
-                  result,
-                }),
-              });
-
-              console.log(`[discord] Callback response status: ${callbackResponse.status}`);
-              if (!callbackResponse.ok) {
-                const errorText = await callbackResponse.text();
-                console.error(
-                  `[discord] ❌ Callback failed: ${callbackResponse.status} ${errorText}`
-                );
-                console.error(`[discord] Callback URL was: ${callbackUrl}`);
-              } else {
-                const responseText = await callbackResponse.text();
-                console.log(`[discord] ✅ Callback successful, response:`, responseText.substring(0, 200));
-              }
-            } catch (err) {
-              console.error("[discord] Failed to parse entrypoint response:", err);
-            }
-          }
-
-          return responseWithHeader;
-        }
-
         return responseWithHeader;
       }
     }
@@ -1828,9 +1231,6 @@ const server = Bun.serve({
 
 console.log(
   `🚀 Agent ready at http://${server.hostname}:${server.port}/.well-known/agent.json`
-);
-console.log(
-  `📡 Discord interactions: http://${server.hostname}:${server.port}/interactions`
 );
 
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -1871,12 +1271,10 @@ if (telegramToken) {
           console.warn(`[telegram] 404 error on ${err?.method || "unknown method"}: ${err?.description || "Not Found"}`);
         }
         // Don't crash server - continue without Telegram bot
-        console.warn("[telegram] Continuing without Telegram bot - Discord bot should still work");
         return;
       }
       // For any other errors, log but don't crash
       console.error("[telegram] Failed to start bot:", err?.message || err);
-      console.warn("[telegram] Continuing without Telegram bot - Discord bot should still work");
     }
   })();
 } else {

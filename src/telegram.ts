@@ -1,53 +1,6 @@
 import { Bot, InlineKeyboard } from "grammy";
-import { validateLookback } from "./lookback";
 import { PAYMENT_CALLBACK_EXPIRY_MS } from "./constants";
 import { pendingTelegramCallbacks } from "./pending";
-import { addTelegramMessage, updateTelegramMessageReactions } from "./telegramStore";
-import { updateUserContext } from "./userContext";
-
-const DEFAULT_LOOKBACK_MINUTES_TOPIC = 60; // 1 hour for topics
-const DEFAULT_LOOKBACK_MINUTES_PERSON = 240; // 4 hours for people
-
-function parseCumCommand(text: string | undefined): { query: string; lookbackMinutes: number } | { error: string } {
-  if (!text) {
-    return { error: "Usage: /Cum for <topic> or /Cum for @username" };
-  }
-  
-  // Parse: /Cum for <query> [minutes]
-  const parts = text.trim().split(/\s+/);
-  if (parts.length < 3 || parts[0].toLowerCase() !== "/cum" || parts[1].toLowerCase() !== "for") {
-    return { error: "Usage: /Cum for <topic> or /Cum for @username" };
-  }
-  
-  // Extract query (everything after "for")
-  const queryStart = text.indexOf("for") + 3;
-  let rest = text.substring(queryStart).trim();
-  
-  // Check if there's a number at the end (lookback minutes)
-  const lastWord = rest.split(/\s+/).pop();
-  const lookbackResult = validateLookback(lastWord || "");
-  
-  let query: string;
-  let lookbackMinutes: number;
-  
-  if (!("error" in lookbackResult)) {
-    // Last word is a number, use it as lookback
-    lookbackMinutes = lookbackResult.minutes;
-    query = rest.substring(0, rest.lastIndexOf(lastWord!)).trim();
-  } else {
-    // No lookback specified - determine if it's a person query and use appropriate default
-    query = rest.trim();
-    // Check if query is a person (starts with @) or is "me"
-    const isPersonQuery = query.toLowerCase() === "me" || query.startsWith("@");
-    lookbackMinutes = isPersonQuery ? DEFAULT_LOOKBACK_MINUTES_PERSON : DEFAULT_LOOKBACK_MINUTES_TOPIC;
-  }
-  
-  if (!query) {
-    return { error: "Please specify a topic or @username" };
-  }
-  
-  return { query, lookbackMinutes };
-}
 
 export function createTelegramBot(options: {
   token: string;
@@ -130,33 +83,28 @@ export function createTelegramBot(options: {
 
   bot.command("start", async (ctx) => {
     await ctx.reply(
-      "hey. i'm CumBot. use /Cum for <topic> or /Cum for @username to summon me."
+      "Hey! I'm BrookerBot. Use /rant <topic> to generate a blistering Charlie Brooker-style rant."
     );
   });
 
-  bot.command("cum", async (ctx) => {
-    // Convert "me" to username before parsing (if present in the command)
-    let commandText = ctx.message?.text;
-    if (commandText && /\bme\b/i.test(commandText)) {
-      const userId = ctx.from?.id;
-      if (userId) {
-        const username = ctx.from.username || String(userId);
-        commandText = commandText.replace(/\bme\b/i, `@${username}`);
-      }
-    }
+  bot.command("rant", async (ctx) => {
+    const text = ctx.message?.text || "";
+    const parts = text.trim().split(/\s+/);
     
-    const parseResult = parseCumCommand(commandText);
+    // Extract topic (everything after "/rant")
+    const topic = parts.slice(1).join(" ").trim();
 
-    if ("error" in parseResult) {
-      await ctx.reply(parseResult.error);
+    if (!topic) {
+      await ctx.reply(
+        `❌ Please provide a topic or person to rant about.\n\nUsage: /rant <topic or person>`
+      );
       return;
     }
 
-    const { query, lookbackMinutes } = parseResult;
     const chatId = ctx.chat?.id;
 
     if (!chatId) {
-      await ctx.reply("could not determine chat id");
+      await ctx.reply("❌ Could not determine chat id.");
       return;
     }
 
@@ -167,8 +115,8 @@ export function createTelegramBot(options: {
     url.searchParams.set("source", "telegram");
     url.searchParams.set("telegram_callback", callbackParam);
     url.searchParams.set("chatId", String(chatId));
-    url.searchParams.set("query", query);
-    url.searchParams.set("lookbackMinutes", String(lookbackMinutes));
+    url.searchParams.set("topic", encodeURIComponent(topic));
+    url.searchParams.set("command", "rant");
 
     const keyboard = new InlineKeyboard().url(
       "Pay $1.00 via x402",
@@ -176,8 +124,8 @@ export function createTelegramBot(options: {
     );
 
     const paymentMessage = await ctx.reply(
-      `🪙 *Payment Required*\n\n` +
-        `/Cum for "${query}"`,
+      `💳 *Payment Required*\n\n` +
+        `BrookerBot will generate a blistering rant about: *${topic}*`,
       {
         parse_mode: "Markdown",
         reply_markup: keyboard,
@@ -189,8 +137,8 @@ export function createTelegramBot(options: {
       threadId: "message_thread_id" in ctx.message ? ctx.message.message_thread_id : undefined,
       messageId: ctx.message?.message_id,
       username: ctx.from?.username,
-      query,
-      lookbackMinutes,
+      topic,
+      command: "rant",
       paymentMessageId: paymentMessage.message_id,
       expiresAt: Date.now() + PAYMENT_CALLBACK_EXPIRY_MS,
     });
