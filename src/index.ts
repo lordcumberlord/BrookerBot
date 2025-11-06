@@ -1258,12 +1258,28 @@ if (telegramToken) {
 
   (async () => {
     try {
+      // Delete any existing webhook first (webhooks prevent polling from working)
+      try {
+        await fetch(`https://api.telegram.org/bot${telegramToken}/deleteWebhook`, {
+          method: "POST",
+          body: JSON.stringify({ drop_pending_updates: true }),
+          headers: { "Content-Type": "application/json" },
+        });
+        console.log("[telegram] Deleted any existing webhook to enable polling");
+      } catch (webhookError: any) {
+        if (webhookError?.response?.status === 404) {
+          console.log("[telegram] No existing webhook to delete (this is fine)");
+        } else {
+          console.warn("[telegram] Error deleting webhook (continuing anyway):", webhookError?.message);
+        }
+      }
+
       const bot = createTelegramBot({
         token: telegramToken,
         baseUrl: publicBaseUrl,
       });
       await bot.start();
-      console.log("🤖 Telegram bot ready");
+      console.log("🤖 Telegram bot ready and polling for commands");
     } catch (err: any) {
       // Handle 409 conflict gracefully (multiple instances running)
       if (err?.error_code === 409) {
