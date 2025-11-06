@@ -118,8 +118,9 @@ export function createTelegramBot(options: {
     url.searchParams.set("topic", encodeURIComponent(topic));
     url.searchParams.set("command", "rant");
 
+    const price = process.env.ENTRYPOINT_PRICE || "0.05";
     const keyboard = new InlineKeyboard().url(
-      "Pay $1.00 via x402",
+      `Pay $${price} via x402`,
       url.toString()
     );
 
