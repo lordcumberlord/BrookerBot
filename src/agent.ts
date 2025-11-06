@@ -99,11 +99,12 @@ const configOverrides: AgentKitConfig = {
     facilitatorUrl:
       (process.env.FACILITATOR_URL as any) ??
       "https://facilitator.x402.rs",
-    payTo:
+    payTo: (
       (process.env.PAY_TO as `0x${string}`) ??
-      "0x68b08c4e17788af6c9d98a2cfde084ed9d6b53cd",
+      "0xc989ead84f34a0532a74cb4d6dd8fcdb91a6aa69"
+    ).toLowerCase() as `0x${string}`,
     network: (process.env.NETWORK as any) ?? "base",
-    defaultPrice: process.env.DEFAULT_PRICE ?? "1.00",
+    defaultPrice: process.env.DEFAULT_PRICE ?? "0.05",
     // Add token configuration for USDC
     // Note: x402 may require token address in payment headers, not config
     // This will depend on x402 SDK implementation
@@ -242,7 +243,7 @@ addEntrypoint({
       .min(1, { message: "Provide a topic or person to rant about." })
       .describe("The topic or person to generate a rant about."),
   }),
-  price: process.env.ENTRYPOINT_PRICE || "1.00",
+  price: process.env.ENTRYPOINT_PRICE || "0.05",
   output: z.object({
     rant: z.string(),
   }),

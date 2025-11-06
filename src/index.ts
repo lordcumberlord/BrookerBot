@@ -252,7 +252,7 @@ const server = Bun.serve({
         process.env.AGENT_URL || `https://brookerbot-production.up.railway.app`;
       const entrypointPath = "rant";
       const entrypointUrl = `${agentBaseUrl}/entrypoints/${entrypointPath}/invoke`;
-      const price = process.env.ENTRYPOINT_PRICE || "1.00";
+      const price = process.env.ENTRYPOINT_PRICE || "0.05";
       const currency = process.env.PAYMENT_CURRENCY || "USDC";
 
       const heading = `🔥 BrookerBot Rant`;
@@ -954,21 +954,22 @@ const server = Bun.serve({
         
         if (isRantEndpoint) {
           sourceLabel = "BrookerBot - Rant";
-          defaultPrice = "1.00";
+          defaultPrice = "0.05";
         } else {
           sourceLabel = "BrookerBot";
-          defaultPrice = "1.00";
+          defaultPrice = "0.05";
         }
 
-        const payToAddress =
-          process.env.PAY_TO || "0x68b08c4e17788af6c9d98a2cfde084ed9d6b53cd";
+        const payToAddress = (
+          process.env.PAY_TO || "0xc989ead84f34a0532a74cb4d6dd8fcdb91a6aa69"
+        ).toLowerCase();
         const facilitatorUrl =
           process.env.FACILITATOR_URL || "https://facilitator.x402.rs";
           const agentBaseUrl =
         process.env.AGENT_URL || `https://brookerbot-production.up.railway.app`;
         const fullEntrypointUrl =
           agentBaseUrl + url.pathname + (url.search ? url.search : "");
-        const price = process.env.ENTRYPOINT_PRICE || defaultPrice;
+        const price = process.env.ENTRYPOINT_PRICE || defaultPrice || "0.05";
         const currency = process.env.PAYMENT_CURRENCY || "USDC";
         const x402Version = 1.0;
 
@@ -1234,10 +1235,19 @@ console.log(
 );
 
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
-const publicBaseUrl =
-  process.env.PUBLIC_WEB_URL ||
-  process.env.AGENT_URL ||
-  `http://${server.hostname}:${server.port}`;
+// Ensure PUBLIC_WEB_URL has https:// prefix if it's just a domain
+const getPublicBaseUrl = () => {
+  const publicUrl = process.env.PUBLIC_WEB_URL || process.env.AGENT_URL;
+  if (publicUrl) {
+    // If it's just a domain (no http:// or https://), add https://
+    if (!publicUrl.startsWith("http://") && !publicUrl.startsWith("https://")) {
+      return `https://${publicUrl}`;
+    }
+    return publicUrl;
+  }
+  return `http://${server.hostname}:${server.port}`;
+};
+const publicBaseUrl = getPublicBaseUrl();
 
 if (telegramToken) {
   if (!publicBaseUrl.startsWith("http")) {
