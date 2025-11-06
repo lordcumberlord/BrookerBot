@@ -222,6 +222,8 @@ const brookerRantFlow = flow<{
     rant: state.ranterResult.rant as string,
   }));
 
+// Create agent app WITHOUT payment config since we handle payment manually
+// This prevents the agent app's payment middleware from running
 const { app, addEntrypoint } = createAgentApp(
   {
     name: "brookerbot",
@@ -230,7 +232,8 @@ const { app, addEntrypoint } = createAgentApp(
       "BrookerBot - a digital manifestation of Charlie Brooker on his most ranty days.",
   },
   {
-    config: configOverrides,
+    // Don't pass payment config - we handle payment manually in index.ts
+    // This prevents double verification and "Unauthorized" errors
   }
 );
 
