@@ -170,6 +170,40 @@ const server = Bun.serve({
     }
 
     // Serve CumBot OG image
+    if (url.pathname === "/assets/brookerbot-og.png" && req.method === "GET") {
+      try {
+        // Try multiple possible paths
+        const possiblePaths = [
+          `${import.meta.dir}/assets/brookerbot-og.png`,
+          "./src/assets/brookerbot-og.png",
+          "src/assets/brookerbot-og.png",
+          "./public/assets/brookerbot-og.png",
+          "public/assets/brookerbot-og.png",
+          `${process.cwd()}/src/assets/brookerbot-og.png`,
+          `${process.cwd()}/public/assets/brookerbot-og.png`,
+        ];
+        
+        for (const imagePath of possiblePaths) {
+          const file = Bun.file(imagePath);
+          if (await file.exists()) {
+            console.log(`[assets] Serving brookerbot-og.png from: ${imagePath}`);
+            return new Response(file, {
+              headers: {
+                "Content-Type": "image/png",
+                "Cache-Control": "public, max-age=86400",
+              },
+            });
+          }
+        }
+        console.error("[assets] brookerbot-og.png not found in any of the expected paths:", possiblePaths);
+        return new Response("OG image not found", { status: 404 });
+      } catch (error) {
+        console.error("[assets] Error serving brookerbot-og.png:", error);
+        return new Response("Error serving OG image", { status: 500 });
+      }
+    }
+    
+    // Legacy route for cumbot-og.png (redirect to brookerbot-og.png)
     if (url.pathname === "/assets/cumbot-og.png" && req.method === "GET") {
       try {
         const file = Bun.file("public/assets/brookerbot-og.png");
@@ -262,7 +296,7 @@ const server = Bun.serve({
       const entityLabel = "Topic";
       const postPaymentPrompt = "After payment, your rant will automatically appear in Telegram.";
 
-      const origin = url.origin;
+      const origin = url.origin.replace(/^http:/, "https:");
       const logoUrl = `${origin}/assets/brookerbot-og.png`;
 
       const pageConfig = {
@@ -709,7 +743,7 @@ const server = Bun.serve({
     }
 
     if (url.pathname === "/download" && req.method === "GET") {
-      const origin = url.origin;
+      const origin = url.origin.replace(/^http:/, "https:");
       const ogImageUrl = `${origin}/assets/brookerbot-og.png`;
       return new Response(`<!DOCTYPE html>
 <html lang="en">
