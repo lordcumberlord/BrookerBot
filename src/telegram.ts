@@ -124,7 +124,7 @@ export function createTelegramBot(options: {
     );
 
     const paymentMessage = await ctx.reply(
-      `💳 *Payment Required*\n\n` +
+      `🪙 *Payment Required*\n\n` +
         `BrookerBot will generate a blistering rant about: *${topic}*`,
       {
         parse_mode: "Markdown",
