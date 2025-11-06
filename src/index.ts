@@ -979,7 +979,7 @@ const server = Bun.serve({
           description: `${sourceLabel} - Pay $${price} ${currency}`,
           mimeType: "application/json",
           payTo: payToAddress,
-          maxAmountRequired: "1000000",
+          maxAmountRequired: "50000", // 0.05 USDC (50000 / 10^6)
           maxTimeoutSeconds: 300,
           network: "base" as const,
           asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
