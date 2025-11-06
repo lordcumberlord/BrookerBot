@@ -1197,12 +1197,18 @@ const server = Bun.serve({
             ]) as any;
             
             const settlementDuration = Date.now() - settlementStartTime;
+            // Extract transaction hash from multiple possible field names
+            const txHash = settlement.txHash || settlement.transactionHash || settlement.hash || settlement.transaction;
             console.log(`[payment] ✅ Settlement completed in ${settlementDuration}ms:`, {
               success: settlement.success,
               hasError: !!settlement.errorReason,
               errorReason: settlement.errorReason,
               payer: settlement.payer,
-              txHash: settlement.txHash || settlement.transactionHash || settlement.hash,
+              txHash: txHash,
+              transaction: settlement.transaction,
+              transactionHash: settlement.transactionHash,
+              hash: settlement.hash,
+              fullSettlementObject: settlement, // Log full object to see all fields
               keys: Object.keys(settlement),
             });
           } catch (settleError: any) {
@@ -1266,7 +1272,19 @@ const server = Bun.serve({
         // Only set settlement header if we successfully settled
         if (!settlementTimedOut && settlement) {
           const settlementHeader = settleResponseHeader(settlement);
-          console.log(`[payment] Settlement succeeded:`, settlement);
+          // Extract transaction hash for logging (check multiple field names)
+          const txHash = settlement.txHash || settlement.transactionHash || settlement.hash || settlement.transaction;
+          console.log(`[payment] Settlement succeeded:`, {
+            success: settlement.success,
+            payer: settlement.payer,
+            transaction: settlement.transaction,
+            transactionHash: settlement.transactionHash,
+            txHash: settlement.txHash,
+            hash: settlement.hash,
+            extractedTxHash: txHash,
+            network: settlement.network,
+            fullObject: settlement,
+          });
           headers.set("X-PAYMENT-RESPONSE", settlementHeader);
         } else {
           console.warn("[payment] ⚠️ Proceeding without settlement header due to timeout");
