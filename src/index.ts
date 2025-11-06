@@ -1164,23 +1164,41 @@ const server = Bun.serve({
           
           // Add timeout wrapper for settlement (60 seconds - facilitator can be slow)
           console.log("[payment] 🔄 Starting settlement with facilitator...");
-          settlement = await Promise.race([
-            facilitatorClient.settle(
-              decodedPayment,
-              selectedPaymentRequirements
-            ),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("Settlement timeout after 60 seconds")), 60000)
-            )
-          ]) as any;
-          
-          console.log("[payment] Settlement response:", {
-            success: settlement.success,
-            hasError: !!settlement.errorReason,
-            errorReason: settlement.errorReason,
-            payer: settlement.payer,
-            keys: Object.keys(settlement),
+          console.log("[payment] Settlement request details:", {
+            facilitatorUrl,
+            decodedPaymentResource: decodedPayment.resource,
+            decodedPaymentAmount: decodedPayment.amount,
+            selectedRequirementsResource: selectedPaymentRequirements.resource,
+            selectedRequirementsPayTo: selectedPaymentRequirements.payTo,
+            selectedRequirementsMaxAmount: selectedPaymentRequirements.maxAmountRequired,
           });
+          
+          const settlementStartTime = Date.now();
+          try {
+            settlement = await Promise.race([
+              facilitatorClient.settle(
+                decodedPayment,
+                selectedPaymentRequirements
+              ),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("Settlement timeout after 60 seconds")), 60000)
+              )
+            ]) as any;
+            
+            const settlementDuration = Date.now() - settlementStartTime;
+            console.log(`[payment] ✅ Settlement completed in ${settlementDuration}ms:`, {
+              success: settlement.success,
+              hasError: !!settlement.errorReason,
+              errorReason: settlement.errorReason,
+              payer: settlement.payer,
+              txHash: settlement.txHash || settlement.transactionHash || settlement.hash,
+              keys: Object.keys(settlement),
+            });
+          } catch (settleError: any) {
+            const settlementDuration = Date.now() - settlementStartTime;
+            console.error(`[payment] ❌ Settlement failed after ${settlementDuration}ms:`, settleError);
+            throw settleError;
+          }
         } catch (error: any) {
           // Check if it's a timeout error
           const isTimeout = error?.name === "TimeoutError" || 
