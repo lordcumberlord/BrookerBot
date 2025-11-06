@@ -1162,14 +1162,15 @@ const server = Bun.serve({
             },
           });
           
-          // Add timeout wrapper for settlement (30 seconds)
+          // Add timeout wrapper for settlement (60 seconds - facilitator can be slow)
+          console.log("[payment] 🔄 Starting settlement with facilitator...");
           settlement = await Promise.race([
             facilitatorClient.settle(
               decodedPayment,
               selectedPaymentRequirements
             ),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("Settlement timeout after 30 seconds")), 30000)
+              setTimeout(() => reject(new Error("Settlement timeout after 60 seconds")), 60000)
             )
           ]) as any;
           
