@@ -94,11 +94,21 @@ const MAX_FETCH_PAGES = 10; // safeguards agent costs by limiting to 1,000 messa
 // USDC on Base: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 (6 decimals)
 const USDC_ON_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
+// Helper to ensure URLs have https:// prefix
+const ensureHttps = (url: string | undefined, defaultUrl: string): string => {
+  const finalUrl = url || defaultUrl;
+  if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
+    return `https://${finalUrl}`;
+  }
+  return finalUrl;
+};
+
 const configOverrides: AgentKitConfig = {
   payments: {
-    facilitatorUrl:
-      (process.env.FACILITATOR_URL as any) ??
-      "https://facilitator.x402.rs",
+    facilitatorUrl: ensureHttps(
+      process.env.FACILITATOR_URL as any,
+      "https://facilitator.x402.rs"
+    ) as any,
     payTo: (
       (process.env.PAY_TO as `0x${string}`) ??
       "0xc989ead84f34a0532a74cb4d6dd8fcdb91a6aa69"

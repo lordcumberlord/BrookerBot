@@ -1000,8 +1000,11 @@ const server = Bun.serve({
         const payToAddress = (
           process.env.PAY_TO || "0xc989ead84f34a0532a74cb4d6dd8fcdb91a6aa69"
         ).toLowerCase();
-        const facilitatorUrl =
-          process.env.FACILITATOR_URL || "https://facilitator.x402.rs";
+        // Ensure FACILITATOR_URL has https:// prefix if it's just a domain
+        let facilitatorUrl = process.env.FACILITATOR_URL || "https://facilitator.x402.rs";
+        if (!facilitatorUrl.startsWith("http://") && !facilitatorUrl.startsWith("https://")) {
+          facilitatorUrl = `https://${facilitatorUrl}`;
+        }
           // Ensure AGENT_URL has https:// prefix if it's just a domain
           let agentBaseUrl = process.env.AGENT_URL || `https://brookerbot-production.up.railway.app`;
           if (!agentBaseUrl.startsWith("http://") && !agentBaseUrl.startsWith("https://")) {
