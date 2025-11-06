@@ -13,7 +13,7 @@ const port = Number(process.env.PORT ?? 8787);
 
 // Payment constants
 const USDC_DECIMALS = 6;
-const DEFAULT_PRICE_USDC = BigInt(1000000); // 1.00 USDC (1000000 / 10^6)
+const DEFAULT_PRICE_USDC = BigInt(50000); // 0.05 USDC (50000 / 10^6)
 
 // Clean up expired callbacks every 30 minutes
 setInterval(() => {
