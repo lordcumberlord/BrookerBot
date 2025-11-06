@@ -248,8 +248,11 @@ const server = Bun.serve({
         return Response.json({ error: "Missing topic parameter for rant command" }, { status: 400 });
       }
 
-      const agentBaseUrl =
-        process.env.AGENT_URL || `https://brookerbot-production.up.railway.app`;
+      // Ensure AGENT_URL has https:// prefix if it's just a domain
+      let agentBaseUrl = process.env.AGENT_URL || `https://brookerbot-production.up.railway.app`;
+      if (!agentBaseUrl.startsWith("http://") && !agentBaseUrl.startsWith("https://")) {
+        agentBaseUrl = `https://${agentBaseUrl}`;
+      }
       const entrypointPath = "rant";
       const entrypointUrl = `${agentBaseUrl}/entrypoints/${entrypointPath}/invoke`;
       const price = process.env.ENTRYPOINT_PRICE || "0.05";
@@ -507,9 +510,9 @@ const server = Bun.serve({
         });
         
         // Wrap fetch with payment handling (pass viem wallet client)
-        // maxValue: $1.00 USDC = 1000000 (6 decimals) for BrookerBot
+        // maxValue: 0.05 USDC = 50000 (6 decimals)
         // Note: x402 uses EIP-3009 for gasless transactions - facilitator pays gas
-        const x402Fetch = wrapFetchWithPayment(fetch, walletClient, BigInt(1000000));
+        const x402Fetch = wrapFetchWithPayment(fetch, walletClient, BigInt(50000));
         
         const entrypointUrl = cfg.entrypointUrl;
         
@@ -965,10 +968,13 @@ const server = Bun.serve({
         ).toLowerCase();
         const facilitatorUrl =
           process.env.FACILITATOR_URL || "https://facilitator.x402.rs";
-          const agentBaseUrl =
-        process.env.AGENT_URL || `https://brookerbot-production.up.railway.app`;
-        const fullEntrypointUrl =
-          agentBaseUrl + url.pathname + (url.search ? url.search : "");
+          // Ensure AGENT_URL has https:// prefix if it's just a domain
+          let agentBaseUrl = process.env.AGENT_URL || `https://brookerbot-production.up.railway.app`;
+          if (!agentBaseUrl.startsWith("http://") && !agentBaseUrl.startsWith("https://")) {
+            agentBaseUrl = `https://${agentBaseUrl}`;
+          }
+        // Construct full entrypoint URL without query parameters (resource should be clean)
+        const fullEntrypointUrl = agentBaseUrl + url.pathname;
         const price = process.env.ENTRYPOINT_PRICE || defaultPrice || "0.05";
         const currency = process.env.PAYMENT_CURRENCY || "USDC";
         const x402Version = 1.0;
