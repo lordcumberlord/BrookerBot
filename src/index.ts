@@ -1139,10 +1139,60 @@ const server = Bun.serve({
         
         console.log("[payment] ✅ Payment verified successfully, proceeding to handler...");
 
-        const appResponse = await app.fetch(req);
+        // Read the request body before passing to agent app
+        let requestBody: string | null = null;
+        try {
+          requestBody = await req.text();
+        } catch (error) {
+          console.warn("[payment] Could not read request body:", error);
+        }
 
+        // Create a new request for the agent app with the payment header
+        // The agent app's payment middleware should recognize the X-PAYMENT header
+        const appRequest = new Request(req.url, {
+          method: req.method,
+          headers: req.headers,
+          body: requestBody,
+        });
+        
+        let appResponse: Response;
+        try {
+          appResponse = await app.fetch(appRequest);
+        } catch (error: any) {
+          console.error("[payment] ❌ Agent app fetch error:", error);
+          // If the agent app throws an error (like payment middleware failure),
+          // return a 500 error with details
+          return Response.json(
+            {
+              error: "Failed to process request after payment verification",
+              details: error?.message || "Unknown error",
+            },
+            { status: 500 }
+          );
+        }
+
+        // Check if the response is an error
         if (appResponse.status >= 400) {
-          return appResponse;
+          // Try to get the error message, but handle non-JSON responses
+          try {
+            const errorText = await appResponse.text();
+            try {
+              const errorJson = JSON.parse(errorText);
+              return Response.json(errorJson, { status: appResponse.status });
+            } catch {
+              // Not JSON, return as text
+              return new Response(errorText, { 
+                status: appResponse.status,
+                headers: { "Content-Type": "text/plain" },
+              });
+            }
+          } catch {
+            // Can't read response, return generic error
+            return Response.json(
+              { error: `Request failed with status ${appResponse.status}` },
+              { status: appResponse.status }
+            );
+          }
         }
 
         const appResponseClone = appResponse.clone();
