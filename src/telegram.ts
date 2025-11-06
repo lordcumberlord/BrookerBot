@@ -1,6 +1,8 @@
 import { Bot, InlineKeyboard } from "grammy";
 import { PAYMENT_CALLBACK_EXPIRY_MS } from "./constants";
 import { pendingTelegramCallbacks } from "./pending";
+import { addTelegramMessage, updateTelegramMessageReactions } from "./telegramStore";
+import { updateUserContext } from "./userContext";
 
 export function createTelegramBot(options: {
   token: string;
