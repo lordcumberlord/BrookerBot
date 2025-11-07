@@ -239,6 +239,13 @@ function truncateToWords(text: string, maxWords: number): string {
   return `${words.slice(0, maxWords).join(" ")}...`;
 }
 
+function stripRantHeader(text: string): string {
+  return text
+    .replace(/^\s*\*{0,2}brookerbot rant\*{0,2}\s*\n?/i, "")
+    .replace(/^\s*brookerbot rant[:\s-]*\n?/i, "")
+    .trimStart();
+}
+
 const brookerRantSignature = "topic:string -> rant:string";
 const brookerRantNodeSpec = `${brookerRantSignature} ${JSON.stringify(brookerRantPrompt)}`;
 
@@ -296,7 +303,7 @@ addEntrypoint({
       );
       return {
         output: {
-          rant: fallbackRant,
+          rant: stripRantHeader(fallbackRant),
         },
         model: "fallback-rant",
       };
@@ -312,10 +319,11 @@ addEntrypoint({
 
       const rantText = result.rant || `I've got nothing. The topic "${topic}" has defeated me. This has never happened before. I'm broken.`;
       const truncatedRant = truncateToWords(rantText, MAX_RANT_WORDS);
+      const cleanedRant = stripRantHeader(truncatedRant);
 
       return {
         output: {
-          rant: truncatedRant,
+          rant: cleanedRant,
         },
         model: usageEntry?.model || "brooker-rant",
       };
@@ -330,7 +338,7 @@ addEntrypoint({
 
       return {
         output: {
-          rant: errorRant,
+          rant: stripRantHeader(errorRant),
         },
         model: "error-rant",
       };
