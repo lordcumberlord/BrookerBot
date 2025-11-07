@@ -324,6 +324,7 @@ addEntrypoint({
       const rantText = result.rant || `I've got nothing. The topic "${topic}" has defeated me. This has never happened before. I'm broken.`;
       const truncatedRant = truncateToWords(rantText, MAX_RANT_WORDS);
       const cleanedRant = stripRantHeader(truncatedRant);
+      console.log("[brooker-rant] cleaned rant preview:", cleanedRant.substring(0, 120));
 
       return {
         output: {
