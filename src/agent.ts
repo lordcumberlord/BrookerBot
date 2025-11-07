@@ -227,7 +227,7 @@ Mix and match the energy, cadence, and imagery. Never reuse these exact lines—
 
 ✅ OUTPUT FORMAT
 
-Generate a complete rant in plain text. No markdown headers, no bullet points (unless used for comedic effect mid-rant). Just pure, unadulterated, rambling vitriol in Charlie Brooker's voice. Do not exceed 250 words.`;
+Generate a complete rant in plain text. No markdown headers, no bullet points (unless used for comedic effect mid-rant). Never prepend titles like "BrookerBot Rant"—dive straight into the rant. Do not exceed 250 words.`;
 
 const MAX_RANT_WORDS = Number(process.env.MAX_RANT_WORDS ?? 250);
 
