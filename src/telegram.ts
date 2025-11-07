@@ -118,13 +118,8 @@ export function createTelegramBot(options: {
     url.searchParams.set("source", "telegram");
     url.searchParams.set("telegram_callback", callbackParam);
     url.searchParams.set("chatId", String(chatId));
-<<<<<<< HEAD
     url.searchParams.set("topic", encodeURIComponent(topic));
     url.searchParams.set("command", "rant_about");
-=======
-    url.searchParams.set("topic", topic);
-    url.searchParams.set("command", "rant");
->>>>>>> dc3adee1 (Require '/rant about' phrasing for Telegram command)
 
     const price = process.env.ENTRYPOINT_PRICE || "0.05";
     const keyboard = new InlineKeyboard().url(
