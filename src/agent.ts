@@ -178,7 +178,7 @@ Your mission: Generate a blistering, rambling rant about the given topic or pers
 • Mix high and low culture references seamlessly
 • Self-deprecating asides: "I'm aware this sounds unhinged, but bear with me"
 • Build to a crescendo: The rant should peak in absurdity before either collapsing or finding a darkly funny conclusion
-• Length: Aim for 300-600 words - long enough to build momentum, short enough to maintain impact
+• Length: Target ~200-230 words; never exceed 250 words. Keep it punchy but substantial.
 
 🎯 TOPIC HANDLING
 
@@ -216,7 +216,17 @@ And that's the thing, isn't it? We live in a world where [topic] not only exists
 
 ✅ OUTPUT FORMAT
 
-Generate a complete rant in plain text. No markdown headers, no bullet points (unless used for comedic effect mid-rant). Just pure, unadulterated, rambling vitriol in Charlie Brooker's voice.`;
+Generate a complete rant in plain text. No markdown headers, no bullet points (unless used for comedic effect mid-rant). Just pure, unadulterated, rambling vitriol in Charlie Brooker's voice. Do not exceed 250 words.`;
+
+const MAX_RANT_WORDS = Number(process.env.MAX_RANT_WORDS ?? 250);
+
+function truncateToWords(text: string, maxWords: number): string {
+  const words = text.trim().split(/\s+/);
+  if (words.length <= maxWords) {
+    return text.trim();
+  }
+  return `${words.slice(0, maxWords).join(" ")}...`;
+}
 
 const brookerRantSignature = "topic:string -> rant:string";
 const brookerRantNodeSpec = `${brookerRantSignature} ${JSON.stringify(brookerRantPrompt)}`;
@@ -269,9 +279,13 @@ addEntrypoint({
 
     const llm = axClient.ax;
     if (!llm) {
+      const fallbackRant = truncateToWords(
+        `Right, so you want me to rant about "${topic}". Fine. Here's the thing: I can't properly channel Charlie Brooker's vitriolic genius without an LLM configured. This is like trying to perform Shakespeare with a Speak & Spell. The topic is there, the rage is there, but the execution is... well, it's this. A meta-rant about the inability to rant properly. Which is actually quite Brooker-esque, now that I think about it. So maybe this is working? No. No, it's not. Configure your LLM, you absolute monster.`,
+        MAX_RANT_WORDS
+      );
       return {
         output: {
-          rant: `Right, so you want me to rant about "${topic}". Fine. Here's the thing: I can't properly channel Charlie Brooker's vitriolic genius without an LLM configured. This is like trying to perform Shakespeare with a Speak & Spell. The topic is there, the rage is there, but the execution is... well, it's this. A meta-rant about the inability to rant properly. Which is actually quite Brooker-esque, now that I think about it. So maybe this is working? No. No, it's not. Configure your LLM, you absolute monster.`,
+          rant: fallbackRant,
         },
         model: "fallback-rant",
       };
@@ -285,9 +299,12 @@ addEntrypoint({
       const usageEntry = brookerRantFlow.getUsage().at(-1);
       brookerRantFlow.resetUsage();
 
+      const rantText = result.rant || `I've got nothing. The topic "${topic}" has defeated me. This has never happened before. I'm broken.`;
+      const truncatedRant = truncateToWords(rantText, MAX_RANT_WORDS);
+
       return {
         output: {
-          rant: result.rant || `I've got nothing. The topic "${topic}" has defeated me. This has never happened before. I'm broken.`,
+          rant: truncatedRant,
         },
         model: usageEntry?.model || "brooker-rant",
       };
@@ -295,9 +312,14 @@ addEntrypoint({
       console.error("[brooker-rant] LLM flow error:", error);
       brookerRantFlow.resetUsage();
 
+      const errorRant = truncateToWords(
+        `Right, so I tried to rant about "${topic}" and the entire system collapsed like a soufflé in an earthquake. The LLM threw a tantrum, the servers wept digital tears, and I'm left here, ranting about the inability to rant. Which is, ironically, very on-brand. The topic remains: "${topic}". My rage remains. But the execution? The execution has left the building, possibly to start a new life in witness protection.`,
+        MAX_RANT_WORDS
+      );
+
       return {
         output: {
-          rant: `Right, so I tried to rant about "${topic}" and the entire system collapsed like a soufflé in an earthquake. The LLM threw a tantrum, the servers wept digital tears, and I'm left here, ranting about the inability to rant. Which is, ironically, very on-brand. The topic remains: "${topic}". My rage remains. But the execution? The execution has left the building, possibly to start a new life in witness protection.`,
+          rant: errorRant,
         },
         model: "error-rant",
       };
