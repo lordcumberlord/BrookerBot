@@ -85,21 +85,20 @@ export function createTelegramBot(options: {
 
   bot.command("start", async (ctx) => {
     await ctx.reply(
-      "Hey! I'm BrookerBot. Use /rant about <topic> to generate a blistering Charlie Brooker-style rant."
+      "Hey! I'm BrookerBot. Use /rant <topic> to generate a blistering Charlie Brooker-style rant."
     );
   });
 
   bot.command("rant", async (ctx) => {
     const text = ctx.message?.text || "";
-    const match = text
-      .trim()
-      .match(/^\/rant(?:@\w+)?\s*(?:about\s+)?(.+)?$/i);
-
-    const topic = match?.[1]?.trim() ?? "";
+    const parts = text.trim().split(/\s+/);
+    
+    // Extract topic (everything after "/rant")
+    const topic = parts.slice(1).join(" ").trim();
 
     if (!topic) {
       await ctx.reply(
-        `❌ Please provide a topic or person to rant about.\n\nUsage: /rant about <topic or person>`
+        `❌ Please provide a topic or person to rant about.\n\nUsage: /rant <topic or person>`
       );
       return;
     }
@@ -119,7 +118,7 @@ export function createTelegramBot(options: {
     url.searchParams.set("telegram_callback", callbackParam);
     url.searchParams.set("chatId", String(chatId));
     url.searchParams.set("topic", encodeURIComponent(topic));
-    url.searchParams.set("command", "rant_about");
+    url.searchParams.set("command", "rant");
 
     const price = process.env.ENTRYPOINT_PRICE || "0.05";
     const keyboard = new InlineKeyboard().url(
