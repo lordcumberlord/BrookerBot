@@ -1156,8 +1156,8 @@ const server = Bun.serve({
 
         const appResponseClone = appResponse.clone();
         let settlement;
-        let settlementTimedOut = false;
         let settlementError = false;
+        const settlementStartTime = Date.now();
         try {
           console.log("[payment] 🔄 Attempting settlement...");
           console.log("[payment] Settlement inputs:", {
@@ -1170,91 +1170,87 @@ const server = Bun.serve({
               payTo: selectedPaymentRequirements.payTo,
             },
           });
-          
-          // Add timeout wrapper for settlement (60 seconds - facilitator can be slow)
+
           console.log("[payment] 🔄 Starting settlement with facilitator...");
           console.log("[payment] Settlement request details:", {
             facilitatorUrl,
             decodedPaymentKeys: Object.keys(decodedPayment),
             decodedPaymentResource: decodedPayment.resource,
             decodedPaymentAmount: decodedPayment.amount,
-            decodedPaymentPayload: decodedPayment.payload ? (typeof decodedPayment.payload === 'object' ? Object.keys(decodedPayment.payload) : decodedPayment.payload) : undefined,
+            decodedPaymentPayload: decodedPayment.payload
+              ? (typeof decodedPayment.payload === "object"
+                  ? Object.keys(decodedPayment.payload)
+                  : decodedPayment.payload)
+              : undefined,
             selectedRequirementsResource: selectedPaymentRequirements.resource,
             selectedRequirementsPayTo: selectedPaymentRequirements.payTo,
             selectedRequirementsMaxAmount: selectedPaymentRequirements.maxAmountRequired,
           });
-          
-          const settlementStartTime = Date.now();
-          try {
-            settlement = await Promise.race([
-              facilitatorClient.settle(
-                decodedPayment,
-                selectedPaymentRequirements
-              ),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("Settlement timeout after 60 seconds")), 60000)
-              )
-            ]) as any;
-            
-            const settlementDuration = Date.now() - settlementStartTime;
-            // Extract transaction hash from multiple possible field names
-            const txHash = settlement.txHash || settlement.transactionHash || settlement.hash || settlement.transaction;
-            console.log(`[payment] ✅ Settlement completed in ${settlementDuration}ms:`, {
-              success: settlement.success,
-              hasError: !!settlement.errorReason,
-              errorReason: settlement.errorReason,
-              payer: settlement.payer,
-              txHash: txHash,
-              transaction: settlement.transaction,
-              transactionHash: settlement.transactionHash,
-              hash: settlement.hash,
-              fullSettlementObject: settlement, // Log full object to see all fields
-              keys: Object.keys(settlement),
-            });
-          } catch (settleError: any) {
-            const settlementDuration = Date.now() - settlementStartTime;
-            console.error(`[payment] ❌ Settlement failed after ${settlementDuration}ms:`, settleError);
-            throw settleError;
-          }
+
+          settlement = await facilitatorClient.settle(
+            decodedPayment,
+            selectedPaymentRequirements
+          );
+
+          const settlementDuration = Date.now() - settlementStartTime;
+          const txHash =
+            settlement?.txHash ||
+            settlement?.transactionHash ||
+            settlement?.hash ||
+            settlement?.transaction;
+          console.log(`[payment] ✅ Settlement completed in ${settlementDuration}ms:`, {
+            success: settlement?.success,
+            hasError: !!settlement?.errorReason,
+            errorReason: settlement?.errorReason,
+            payer: settlement?.payer,
+            txHash,
+            transaction: settlement?.transaction,
+            transactionHash: settlement?.transactionHash,
+            hash: settlement?.hash,
+            fullSettlementObject: settlement,
+            keys: settlement ? Object.keys(settlement) : [],
+          });
         } catch (error: any) {
-          // Check if it's a timeout error
-          const isTimeout = error?.name === "TimeoutError" || 
-                           error?.message?.includes("timeout") || 
-                           error?.message?.includes("Timeout");
-          
+          const settlementDuration = Date.now() - settlementStartTime;
+          console.error(
+            `[payment] ❌ Settlement failed after ${settlementDuration}ms:`,
+            error
+          );
+          settlementError = true;
+
+          const isTimeout =
+            error?.name === "TimeoutError" ||
+            error?.message?.includes("timeout") ||
+            error?.message?.includes("Timeout");
+
           if (isTimeout) {
-            console.warn("[payment] ⚠️ Settlement timed out, but payment was verified - proceeding with response");
-            console.warn("[payment] Settlement timeout details:", {
-              message: error?.message,
-              name: error?.name,
-            });
-            settlementTimedOut = true;
-            // Continue execution - payment was already verified, handler already ran
-            // Settlement can be retried later or handled separately
+            console.warn(
+              "[payment] ⚠️ Settlement timed out, but payment was verified - proceeding with response"
+            );
           } else {
-            console.error("[payment] ❌ Facilitator settlement error", error);
             console.error("[payment] Error details:", {
               message: error?.message,
               name: error?.name,
               stack: error?.stack?.substring(0, 500),
-              response: error?.response ? {
-                status: error.response.status,
-                statusText: error.response.statusText,
-                data: typeof error.response.data === 'string' 
-                  ? error.response.data.substring(0, 500)
-                  : JSON.stringify(error.response.data).substring(0, 500),
-              } : undefined,
+              response: error?.response
+                ? {
+                    status: error.response.status,
+                    statusText: error.response.statusText,
+                    data:
+                      typeof error.response.data === "string"
+                        ? error.response.data.substring(0, 500)
+                        : JSON.stringify(error.response.data).substring(0, 500),
+                  }
+                : undefined,
             });
-            // For non-timeout errors, log but continue - payment was already verified
-            // Settlement failures shouldn't block the response if payment verification passed
-            console.warn("[payment] ⚠️ WARNING: Settlement failed but payment was verified - proceeding with response");
-            settlementError = true;
-            // Don't return error - continue to return the app response
+            console.warn(
+              "[payment] ⚠️ WARNING: Settlement failed but payment was verified - proceeding with response"
+            );
           }
         }
 
         // Only check settlement.success if we actually got a settlement response
-        if (!settlementTimedOut && settlement && !settlement.success) {
+        if (!settlementError && settlement && !settlement.success) {
           console.error("[payment] Settlement failed", settlement);
           return Response.json(
             {
@@ -1270,7 +1266,7 @@ const server = Bun.serve({
         const headers = new Headers(appResponse.headers);
         
         // Only set settlement header if we successfully settled
-        if (!settlementTimedOut && settlement) {
+        if (!settlementError && settlement) {
           const settlementHeader = settleResponseHeader(settlement);
           // Extract transaction hash for logging (check multiple field names)
           const txHash = settlement.txHash || settlement.transactionHash || settlement.hash || settlement.transaction;
@@ -1287,7 +1283,7 @@ const server = Bun.serve({
           });
           headers.set("X-PAYMENT-RESPONSE", settlementHeader);
         } else {
-          console.warn("[payment] ⚠️ Proceeding without settlement header due to timeout");
+          console.warn("[payment] ⚠️ Proceeding without settlement header (no settlement result)");
         }
         const responseWithHeader = new Response(appResponse.body, {
           status: appResponse.status,
