@@ -85,20 +85,20 @@ export function createTelegramBot(options: {
 
   bot.command("start", async (ctx) => {
     await ctx.reply(
-      "Hey! I'm BrookerBot. Use /rant <topic> to generate a blistering Charlie Brooker-style rant."
+      "Hey! I'm BrookerBot. Use /rant_about <topic> to generate a blistering Charlie Brooker-style rant."
     );
   });
 
-  bot.command("rant", async (ctx) => {
+  bot.command("rant_about", async (ctx) => {
     const text = ctx.message?.text || "";
     const parts = text.trim().split(/\s+/);
-    
-    // Extract topic (everything after "/rant")
+
+    // Extract topic (everything after "/rant_about")
     const topic = parts.slice(1).join(" ").trim();
 
     if (!topic) {
       await ctx.reply(
-        `❌ Please provide a topic or person to rant about.\n\nUsage: /rant <topic or person>`
+        `❌ Please provide a topic or person to rant about.\n\nUsage: /rant_about <topic or person>`
       );
       return;
     }
