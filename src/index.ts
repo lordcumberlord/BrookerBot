@@ -9,6 +9,15 @@ import {
 } from "./pending";
 import { createTelegramBot } from "./telegram";
 
+function stripBrookerHeader(text: string): string {
+  const headerPattern = /^(?:\s*\*{0,3})?\s*brookerbot rant(?:\s*[:\-–—]?\s*)?(?:[\r\n]+|\s{2,})/i;
+  let cleaned = text;
+  while (headerPattern.test(cleaned)) {
+    cleaned = cleaned.replace(headerPattern, "").trimStart();
+  }
+  return cleaned;
+}
+
 const port = Number(process.env.PORT ?? 8787);
 
 // Payment constants
@@ -54,6 +63,8 @@ async function handleTelegramCallback(req: Request): Promise<Response> {
     const output = result?.output || result;
     // Extract rant from BrookerBot
     const messageText = (output?.rant || "").trim();
+    const sanitizedMessage = stripBrookerHeader(messageText);
+    const formattedMessage = sanitizedMessage;
     
     if (!messageText) {
       const fallbackText = `Right, so I tried to generate a rant about "${callbackData.topic || "the topic"}" and... nothing. The rage is there, the vitriol is there, but the words? The words have left the building. This is a meta-rant about the inability to rant, which is actually quite on-brand for BrookerBot.`;
@@ -71,8 +82,6 @@ async function handleTelegramCallback(req: Request): Promise<Response> {
       return Response.json({ success: true });
     }
     
-    const formattedMessage = `**BrookerBot Rant**\n\n${messageText}`;
-
     // Send to Telegram - try to complete it quickly, but don't block forever
     try {
       await Promise.race([
