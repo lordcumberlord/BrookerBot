@@ -1157,7 +1157,6 @@ const server = Bun.serve({
         const appResponseClone = appResponse.clone();
         let settlement;
         let settlementError = false;
-        const settlementStartTime = Date.now();
         try {
           console.log("[payment] 🔄 Attempting settlement...");
           console.log("[payment] Settlement inputs:", {
@@ -1192,13 +1191,12 @@ const server = Bun.serve({
             selectedPaymentRequirements
           );
 
-          const settlementDuration = Date.now() - settlementStartTime;
           const txHash =
             settlement?.txHash ||
             settlement?.transactionHash ||
             settlement?.hash ||
             settlement?.transaction;
-          console.log(`[payment] ✅ Settlement completed in ${settlementDuration}ms:`, {
+          console.log(`[payment] ✅ Settlement completed:`, {
             success: settlement?.success,
             hasError: !!settlement?.errorReason,
             errorReason: settlement?.errorReason,
@@ -1211,42 +1209,26 @@ const server = Bun.serve({
             keys: settlement ? Object.keys(settlement) : [],
           });
         } catch (error: any) {
-          const settlementDuration = Date.now() - settlementStartTime;
-          console.error(
-            `[payment] ❌ Settlement failed after ${settlementDuration}ms:`,
-            error
-          );
+          console.error(`[payment] ❌ Settlement failed:`, error);
           settlementError = true;
-
-          const isTimeout =
-            error?.name === "TimeoutError" ||
-            error?.message?.includes("timeout") ||
-            error?.message?.includes("Timeout");
-
-          if (isTimeout) {
-            console.warn(
-              "[payment] ⚠️ Settlement timed out, but payment was verified - proceeding with response"
-            );
-          } else {
-            console.error("[payment] Error details:", {
-              message: error?.message,
-              name: error?.name,
-              stack: error?.stack?.substring(0, 500),
-              response: error?.response
-                ? {
-                    status: error.response.status,
-                    statusText: error.response.statusText,
-                    data:
-                      typeof error.response.data === "string"
-                        ? error.response.data.substring(0, 500)
-                        : JSON.stringify(error.response.data).substring(0, 500),
-                  }
-                : undefined,
-            });
-            console.warn(
-              "[payment] ⚠️ WARNING: Settlement failed but payment was verified - proceeding with response"
-            );
-          }
+          console.error("[payment] Error details:", {
+            message: error?.message,
+            name: error?.name,
+            stack: error?.stack?.substring(0, 500),
+            response: error?.response
+              ? {
+                  status: error.response.status,
+                  statusText: error.response.statusText,
+                  data:
+                    typeof error.response.data === "string"
+                      ? error.response.data.substring(0, 500)
+                      : JSON.stringify(error.response.data).substring(0, 500),
+                }
+              : undefined,
+          });
+          console.warn(
+            "[payment] ⚠️ WARNING: Settlement failed but payment was verified - proceeding with response"
+          );
         }
 
         // Only check settlement.success if we actually got a settlement response
