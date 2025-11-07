@@ -241,16 +241,13 @@ function truncateToWords(text: string, maxWords: number): string {
 
 function stripRantHeader(text: string): string {
   let cleaned = text;
-  const headerRegexes = [
-    /^\s*\*{0,2}brookerbot rant\*{0,2}[:\s-]*[\r\n]+/i,
-    /^\s*brookerbot rant[:\s-]*[\r\n]+/i,
-  ];
+  const headerPattern = /^(?:\s*\*{0,3})?\s*brookerbot rant(?:\s*[:\-–—]?\s*)?(?:[\r\n]+|\s{2,})/i;
 
-  for (const regex of headerRegexes) {
-    cleaned = cleaned.replace(regex, "");
+  while (headerPattern.test(cleaned)) {
+    cleaned = cleaned.replace(headerPattern, "").trimStart();
   }
 
-  return cleaned.trimStart();
+  return cleaned;
 }
 
 const brookerRantSignature = "topic:string -> rant:string";
