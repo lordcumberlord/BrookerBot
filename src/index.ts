@@ -78,6 +78,10 @@ async function handleTelegramCallback(req: Request): Promise<Response> {
       await Promise.race([
         (async () => {
           const sendUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+          console.log(
+            "[telegram-callback] final message preview:",
+            formattedMessage.substring(0, 120)
+          );
           const sendResponse = await fetch(sendUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
