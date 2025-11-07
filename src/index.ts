@@ -71,7 +71,7 @@ async function handleTelegramCallback(req: Request): Promise<Response> {
       return Response.json({ success: true });
     }
     
-    const formattedMessage = `**BrookerBot Rant**\n\n${messageText}`;
+    const formattedMessage = messageText;
 
     // Send to Telegram - try to complete it quickly, but don't block forever
     try {
@@ -84,7 +84,6 @@ async function handleTelegramCallback(req: Request): Promise<Response> {
             body: JSON.stringify({
               chat_id: callbackData.chatId,
               text: formattedMessage,
-              parse_mode: "Markdown",
             }),
           });
 
@@ -129,7 +128,6 @@ async function handleTelegramCallback(req: Request): Promise<Response> {
             body: JSON.stringify({
               chat_id: callbackData.chatId,
               text: formattedMessage,
-              parse_mode: "Markdown",
             }),
           });
           if (retryResponse.ok) {
