@@ -240,10 +240,17 @@ function truncateToWords(text: string, maxWords: number): string {
 }
 
 function stripRantHeader(text: string): string {
-  return text
-    .replace(/^\s*\*{0,2}brookerbot rant\*{0,2}\s*\n?/i, "")
-    .replace(/^\s*brookerbot rant[:\s-]*\n?/i, "")
-    .trimStart();
+  let cleaned = text;
+  const headerRegexes = [
+    /^\s*\*{0,2}brookerbot rant\*{0,2}[:\s-]*[\r\n]+/i,
+    /^\s*brookerbot rant[:\s-]*[\r\n]+/i,
+  ];
+
+  for (const regex of headerRegexes) {
+    cleaned = cleaned.replace(regex, "");
+  }
+
+  return cleaned.trimStart();
 }
 
 const brookerRantSignature = "topic:string -> rant:string";
