@@ -311,6 +311,7 @@ const server = Bun.serve({
 
       const origin = url.origin.replace(/^http:/, "https:");
       const logoUrl = `${origin}/assets/brookerbot-og.png`;
+      const displayTopic = decodeURIComponent(topic);
 
       const pageConfig = {
         source,
@@ -394,7 +395,7 @@ const server = Bun.serve({
     <h1>${heading}</h1>
     <div class="info">
       <p><strong>Price:</strong> $${price} ${currency}</p>
-      <p><strong>${entityLabel}:</strong> ${topic}</p>
+      <p><strong>${entityLabel}:</strong> ${displayTopic}</p>
     </div>
     <p style="text-align: center; color: #cbd5f5;">Click below to pay via x402. ${postPaymentPrompt}</p>
     <button class="button" onclick="pay()">Pay $${price} ${currency}</button>
