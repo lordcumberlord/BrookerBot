@@ -960,27 +960,21 @@ const server = Bun.serve({
     <header>
       <div class="logo"></div>
       <h1>BrookerBot</h1>
-      <p class="lead">Generate blistering Charlie Brooker-style rants about any topic or person.<br><br>A vitriolic AI that channels the spirit of Black Mirror's creator.</p>
+      <p class="lead">Generate blistering Charlie Brooker-style rants about any topic.</p>
     </header>
 
     <section>
       <h2>How It Works</h2>
       <ol class="steps">
         <li>Install the bot into your Telegram chat.</li>
-        <li>Use <code>/rant &lt;topic&gt;</code> to request a blistering Charlie Brooker-style rant.</li>
-        <li>Pay securely via x402 ($1.00), then receive your vitriolic rant right in your chat.</li>
+        <li>Use <code>/rant_about &lt;topic&gt;</code> to request a Charlie Brooker-style rant.</li>
+        <li>Pay securely via x402 ($0.05), then receive a response in your chat.</li>
       </ol>
     </section>
 
     <section>
       <h2>Download</h2>
-      <div class="actions">
-        <div class="action-card">
-          <h3>Telegram Bot</h3>
-          <p>Add the bot to your chats and request blistering rants directly inside Telegram.</p>
-          <a class="button" href="https://t.me/x402BrookerBot" target="_blank" rel="noopener">Open in Telegram</a>
-        </div>
-      </div>
+      <a class="button" href="https://t.me/x402BrookerBot" target="_blank" rel="noopener">Open in Telegram</a>
     </section>
 
     <footer>Need help or want early access elsewhere? Contact @lordcumberlord on X.</footer>
